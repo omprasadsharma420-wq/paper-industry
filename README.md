@@ -64,7 +64,20 @@ Import this workflow into n8n Cloud:
 n8n/dispatch-control-workflow.json
 ```
 
-It provides a first `POST /dispatch-control` webhook for validation, weight-check, and document-check business rules.
+Production webhook base URL:
+
+```text
+https://om420.app.n8n.cloud/webhook
+```
+
+The workflow provides:
+
+```text
+GET /paper-dispatch-health
+POST /paper-dispatch-control
+```
+
+The dispatch-control endpoint handles validation, approval/reservation, vehicle movement, weight checks, document checks, gate clearance, and exit confirmation.
 
 ## Business Rules
 
