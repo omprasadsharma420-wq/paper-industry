@@ -1,0 +1,81 @@
+{
+  "action": "APPROVE_AND_RESERVE",
+  "actor": {
+    "name": "Demo Dispatch Supervisor",
+    "role": "DISPATCH_SUPERVISOR"
+  },
+  "dispatch": {
+    "id": "disp-demo-001",
+    "requestNo": "DR-2026-0001",
+    "status": "AWAITING_APPROVAL",
+    "customerName": "Kathmandu Stationery Mart",
+    "lines": [
+      {
+        "id": "line-001",
+        "productCode": "A4-80G-WHITE",
+        "productName": "A4 Copier Paper 80 GSM",
+        "requestedQty": 500,
+        "unit": "REAM"
+      },
+      {
+        "id": "line-002",
+        "productCode": "KRAFT-120G-ROLL",
+        "productName": "Kraft Paper Roll 120 GSM",
+        "requestedQty": 1200,
+        "unit": "KG"
+      }
+    ]
+  },
+  "inventory": [
+    {
+      "id": "batch-a4-001",
+      "batchNo": "A4-2026-0710-A",
+      "productCode": "A4-80G-WHITE",
+      "onHandQty": 300,
+      "reservedQty": 0,
+      "unit": "REAM",
+      "qualityStatus": "RELEASED",
+      "producedOn": "2026-07-10"
+    },
+    {
+      "id": "batch-a4-002",
+      "batchNo": "A4-2026-0712-B",
+      "productCode": "A4-80G-WHITE",
+      "onHandQty": 350,
+      "reservedQty": 50,
+      "unit": "REAM",
+      "qualityStatus": "RELEASED",
+      "producedOn": "2026-07-12"
+    },
+    {
+      "id": "batch-kraft-001",
+      "batchNo": "KR-2026-0709-A",
+      "productCode": "KRAFT-120G-ROLL",
+      "onHandQty": 1000,
+      "reservedQty": 0,
+      "unit": "KG",
+      "qualityStatus": "RELEASED",
+      "producedOn": "2026-07-09"
+    },
+    {
+      "id": "batch-kraft-002",
+      "batchNo": "KR-2026-0713-B",
+      "productCode": "KRAFT-120G-ROLL",
+      "onHandQty": 500,
+      "reservedQty": 0,
+      "unit": "KG",
+      "qualityStatus": "RELEASED",
+      "producedOn": "2026-07-13"
+    },
+    {
+      "id": "batch-kraft-blocked",
+      "batchNo": "KR-2026-0714-QA",
+      "productCode": "KRAFT-120G-ROLL",
+      "onHandQty": 200,
+      "reservedQty": 0,
+      "unit": "KG",
+      "qualityStatus": "BLOCKED",
+      "producedOn": "2026-07-14"
+    }
+  ]
+}
