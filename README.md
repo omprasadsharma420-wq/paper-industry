@@ -9,8 +9,8 @@ The pilot demonstrates approval controls, released-stock checks, quality blocks,
 - Next.js
 - TypeScript
 - Tailwind CSS
-- Supabase-ready schema and client configuration
-- n8n-ready workflow import
+- Supabase-backed shared operational state
+- n8n production control workflow
 
 ## Demo Login Roles
 
@@ -42,10 +42,10 @@ pnpm dev
 
 ## Supabase
 
-The migration is in:
+The versioned migrations are in:
 
 ```text
-supabase/migrations/202607150001_dispatch_control_schema.sql
+supabase/migrations/
 ```
 
 The app includes a Supabase client at:
@@ -54,7 +54,7 @@ The app includes a Supabase client at:
 src/lib/supabase.ts
 ```
 
-Copy `.env.example` to `.env.local` when connecting the UI to live Supabase data.
+Copy `.env.example` to `.env.local` when running against the live demo backend.
 
 ## n8n
 
@@ -78,6 +78,16 @@ POST /paper-dispatch-control
 ```
 
 The dispatch-control endpoint handles validation, approval/reservation, vehicle movement, weight checks, document checks, gate clearance, and exit confirmation.
+
+## Verification
+
+With the three public environment variables configured, run:
+
+```bash
+pnpm verify:demo
+```
+
+The verifier runs a prepared dispatch through every role using the production n8n webhook and Supabase RPCs, checks shared truck, weight, paper, and inventory data, creates a new job, and resets the presentation dataset when it finishes.
 
 ## Business Rules
 

@@ -1,6 +1,6 @@
 import type { AppState, AppUser, DispatchRequest, WorkflowResult } from "./types";
 import { isSupabaseConfigured, supabase } from "./supabase";
-import type { CreateDispatchInput, WorkflowAction } from "./workflow";
+import type { CreateDispatchInput, WorkflowAction, WorkflowActionInput } from "./workflow";
 
 export const isBackendConfigured = isSupabaseConfigured;
 
@@ -32,15 +32,29 @@ function normalizeRpcResult(data: unknown): WorkflowResult {
   };
 }
 
-function dispatchForControl(action: WorkflowAction, dispatch: DispatchRequest): DispatchRequest {
-  if (action !== "VERIFY_WEIGHT" || dispatch.actualWeightKg || !dispatch.expectedWeightKg) {
-    return dispatch;
+function dispatchForControl(
+  action: WorkflowAction,
+  dispatch: DispatchRequest,
+  input: WorkflowActionInput,
+): DispatchRequest {
+  const next = { ...dispatch };
+
+  if (action === "ASSIGN_VEHICLE" && input.vehicle) {
+    next.vehicle = input.vehicle;
   }
 
-  return {
-    ...dispatch,
-    actualWeightKg: Math.round(dispatch.expectedWeightKg * 1.006),
-  };
+  if (action === "VERIFY_WEIGHT") {
+    next.actualWeightKg =
+      input.actualWeightKg ??
+      dispatch.actualWeightKg ??
+      (dispatch.expectedWeightKg ? Math.round(dispatch.expectedWeightKg * 1.006) : 0);
+  }
+
+  if (action === "VERIFY_DOCUMENTS" && input.documents) {
+    next.documents = input.documents;
+  }
+
+  return next;
 }
 
 async function callDispatchControl(
@@ -48,6 +62,7 @@ async function callDispatchControl(
   dispatch: DispatchRequest,
   actor: AppUser,
   action: WorkflowAction,
+  input: WorkflowActionInput,
 ): Promise<N8nControlResult> {
   const baseUrl = process.env.NEXT_PUBLIC_N8N_WEBHOOK_BASE_URL;
   if (!baseUrl) {
@@ -63,7 +78,7 @@ async function callDispatchControl(
         name: actor.name,
         role: actor.role,
       },
-      dispatch: dispatchForControl(action, dispatch),
+      dispatch: dispatchForControl(action, dispatch, input),
       inventory: state.inventory,
     }),
   });
@@ -121,6 +136,7 @@ export async function performBackendWorkflowAction(
   dispatchId: string,
   actor: AppUser,
   action: WorkflowAction,
+  input: WorkflowActionInput = {},
 ): Promise<WorkflowResult | null> {
   if (!isBackendConfigured) return null;
 
@@ -129,13 +145,14 @@ export async function performBackendWorkflowAction(
     return { state, dispatchId, message: "Dispatch was not found." };
   }
 
-  const controlResult = await callDispatchControl(state, dispatch, actor, action);
+  const controlResult = await callDispatchControl(state, dispatch, actor, action, input);
   const client = assertBackend();
   const { data, error } = await client.rpc("demo_apply_workflow_action", {
     p_dispatch_id: dispatchId,
     p_actor_name: actor.name,
     p_actor_role: actor.role,
     p_action: action,
+    p_action_input: input,
     p_n8n_result: controlResult,
   });
 

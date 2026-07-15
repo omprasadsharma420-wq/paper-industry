@@ -9,6 +9,8 @@ import {
   Boxes,
   CalendarDays,
   CheckCircle2,
+  Check,
+  ChevronRight,
   ClipboardCheck,
   ClipboardList,
   Database,
@@ -22,6 +24,7 @@ import {
   LogOut,
   PackageCheck,
   Plus,
+  RefreshCw,
   RotateCcw,
   Search,
   Send,
@@ -29,6 +32,7 @@ import {
   Truck,
   UserCheck,
   Warehouse,
+  X,
   XCircle,
 } from "lucide-react";
 import { clsx } from "clsx";
@@ -44,9 +48,11 @@ import type {
   AppState,
   AppUser,
   ControlStatus,
+  DispatchDocument,
   DispatchRequest,
   InventoryBatch,
   Product,
+  UserRole,
   WorkflowStatus,
 } from "@/lib/types";
 import {
@@ -54,7 +60,6 @@ import {
   availableQty,
   createDispatch,
   getAvailableActions,
-  getDispatchAgeHours,
   getWorkflowProgress,
   performWorkflowAction,
   releasedAvailableQty,
@@ -62,6 +67,7 @@ import {
   statusLabels,
   type CreateDispatchInput,
   type WorkflowAction,
+  type WorkflowActionInput,
 } from "@/lib/workflow";
 
 type ViewId =
@@ -78,16 +84,67 @@ const navItems: Array<{
   id: ViewId;
   label: string;
   icon: ComponentType<{ className?: string }>;
+  roles: UserRole[];
 }> = [
-  { id: "overview", label: "Overview", icon: HomeIcon },
-  { id: "dispatches", label: "Dispatch List", icon: ClipboardList },
-  { id: "create", label: "Create Dispatch", icon: Plus },
-  { id: "details", label: "Dispatch Details", icon: FileText },
-  { id: "inventory", label: "Inventory", icon: Warehouse },
-  { id: "exceptions", label: "Exceptions", icon: AlertTriangle },
-  { id: "reports", label: "Reports", icon: BarChart3 },
-  { id: "audit", label: "Audit Timeline", icon: History },
+  { id: "overview", label: "Home", icon: HomeIcon, roles: ["DISPATCH_CLERK", "WAREHOUSE_QUALITY", "DISPATCH_SUPERVISOR", "GATE_SECURITY", "MANAGER_ADMIN"] },
+  { id: "dispatches", label: "Jobs", icon: ClipboardList, roles: ["DISPATCH_CLERK", "WAREHOUSE_QUALITY", "DISPATCH_SUPERVISOR", "GATE_SECURITY", "MANAGER_ADMIN"] },
+  { id: "create", label: "New Job", icon: Plus, roles: ["DISPATCH_CLERK", "MANAGER_ADMIN"] },
+  { id: "inventory", label: "Stock", icon: Warehouse, roles: ["DISPATCH_CLERK", "WAREHOUSE_QUALITY", "DISPATCH_SUPERVISOR", "MANAGER_ADMIN"] },
+  { id: "exceptions", label: "Problems", icon: AlertTriangle, roles: ["DISPATCH_SUPERVISOR", "MANAGER_ADMIN"] },
+  { id: "reports", label: "Summary", icon: BarChart3, roles: ["MANAGER_ADMIN"] },
+  { id: "audit", label: "Activity", icon: History, roles: ["MANAGER_ADMIN"] },
 ];
+
+const roleGuidance: Record<UserRole, { title: string; duty: string }> = {
+  DISPATCH_CLERK: {
+    title: "Dispatch Desk",
+    duty: "Create jobs, send them for approval, and book trucks.",
+  },
+  WAREHOUSE_QUALITY: {
+    title: "Store and Quality",
+    duty: "Load released stock and record the final weight.",
+  },
+  DISPATCH_SUPERVISOR: {
+    title: "Dispatch Control",
+    duty: "Approve jobs, check papers, and handle dispatch problems.",
+  },
+  GATE_SECURITY: {
+    title: "Factory Gate",
+    duty: "Record truck arrival, allow exit, and confirm departure.",
+  },
+  MANAGER_ADMIN: {
+    title: "Factory Overview",
+    duty: "See all work, clear problems, and review performance.",
+  },
+};
+
+const inputActions: WorkflowAction[] = [
+  "ASSIGN_VEHICLE",
+  "VERIFY_WEIGHT",
+  "VERIFY_DOCUMENTS",
+  "REJECT",
+  "RESOLVE_EXCEPTION",
+  "CANCEL",
+];
+
+const controlLabels: Record<ControlStatus, string> = {
+  CLEAR: "Good",
+  WARNING: "Check",
+  BLOCKED: "Blocked",
+};
+
+const documentLabels: Record<DispatchDocument["type"], string> = {
+  COMMERCIAL_INVOICE: "Invoice",
+  DELIVERY_CHALLAN: "Delivery note",
+  PACKING_LIST: "Packing list",
+  GATE_PASS: "Gate pass",
+};
+
+const qualityLabels: Record<InventoryBatch["qualityStatus"], string> = {
+  RELEASED: "Ready",
+  PENDING_INSPECTION: "Check pending",
+  BLOCKED: "Blocked",
+};
 
 const terminalStatuses: WorkflowStatus[] = ["DISPATCHED", "CANCELLED", "REJECTED"];
 
@@ -114,36 +171,36 @@ function formatDate(value: string): string {
 
 function controlClasses(status: ControlStatus): string {
   return clsx(
-    "inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-semibold",
-    status === "CLEAR" && "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200",
-    status === "WARNING" && "bg-amber-50 text-amber-800 ring-1 ring-amber-200",
-    status === "BLOCKED" && "bg-rose-50 text-rose-700 ring-1 ring-rose-200",
+    "inline-flex min-h-6 items-center gap-1 rounded-md px-2 py-1 text-xs font-semibold",
+    status === "CLEAR" && "bg-emerald-50 text-emerald-700",
+    status === "WARNING" && "bg-amber-50 text-amber-800",
+    status === "BLOCKED" && "bg-rose-50 text-rose-700",
   );
 }
 
 function statusClasses(status: WorkflowStatus): string {
   return clsx(
-    "inline-flex items-center rounded-md px-2 py-1 text-xs font-semibold ring-1",
-    status === "DISPATCHED" && "bg-emerald-50 text-emerald-700 ring-emerald-200",
-    status === "REJECTED" && "bg-rose-50 text-rose-700 ring-rose-200",
-    status === "CANCELLED" && "bg-zinc-100 text-zinc-700 ring-zinc-200",
-    status === "AWAITING_APPROVAL" && "bg-amber-50 text-amber-800 ring-amber-200",
+    "inline-flex min-h-6 items-center rounded-md px-2 py-1 text-xs font-semibold",
+    status === "DISPATCHED" && "bg-emerald-50 text-emerald-700",
+    status === "REJECTED" && "bg-rose-50 text-rose-700",
+    status === "CANCELLED" && "bg-zinc-100 text-zinc-700",
+    status === "AWAITING_APPROVAL" && "bg-amber-50 text-amber-800",
     status.includes("AWAITING_") &&
       status !== "AWAITING_APPROVAL" &&
-      "bg-sky-50 text-sky-700 ring-sky-200",
+      "bg-sky-50 text-sky-700",
     ["APPROVED", "VEHICLE_ASSIGNED", "VEHICLE_ARRIVED", "LOADING", "CLEARED_FOR_EXIT"].includes(
       status,
-    ) && "bg-blue-50 text-blue-700 ring-blue-200",
-    status === "DRAFT" && "bg-zinc-50 text-zinc-700 ring-zinc-200",
+    ) && "bg-blue-50 text-blue-700",
+    status === "DRAFT" && "bg-zinc-100 text-zinc-700",
   );
 }
 
 function qualityClasses(status: InventoryBatch["qualityStatus"]): string {
   return clsx(
-    "inline-flex items-center rounded-md px-2 py-1 text-xs font-semibold ring-1",
-    status === "RELEASED" && "bg-emerald-50 text-emerald-700 ring-emerald-200",
-    status === "PENDING_INSPECTION" && "bg-amber-50 text-amber-800 ring-amber-200",
-    status === "BLOCKED" && "bg-rose-50 text-rose-700 ring-rose-200",
+    "inline-flex min-h-6 items-center rounded-md px-2 py-1 text-xs font-semibold",
+    status === "RELEASED" && "bg-emerald-50 text-emerald-700",
+    status === "PENDING_INSPECTION" && "bg-amber-50 text-amber-800",
+    status === "BLOCKED" && "bg-rose-50 text-rose-700",
   );
 }
 
@@ -161,6 +218,11 @@ function getControlIcon(status: ControlStatus) {
   if (status === "CLEAR") return <CheckCircle2 className="h-3.5 w-3.5" />;
   if (status === "WARNING") return <AlertTriangle className="h-3.5 w-3.5" />;
   return <XCircle className="h-3.5 w-3.5" />;
+}
+
+function activityLabel(action: string): string {
+  if (action === "CREATED") return "Job created";
+  return actionLabels[action as WorkflowAction] ?? action.replaceAll("_", " ").toLowerCase();
 }
 
 function loadStoredState(): AppState | null {
@@ -189,6 +251,11 @@ export default function Home() {
     isBackendConfigured ? "loading" : "local",
   );
   const [isBusy, setIsBusy] = useState(false);
+  const [lastSynced, setLastSynced] = useState<Date | null>(null);
+  const [pendingAction, setPendingAction] = useState<{
+    dispatchId: string;
+    action: WorkflowAction;
+  } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -203,7 +270,8 @@ export default function Home() {
             setState(backendState);
             setSelectedDispatchId(backendState.dispatches[0]?.id ?? "");
             setBackendMode("supabase");
-            setToast("Connected to Supabase backend and n8n controls.");
+            setLastSynced(new Date());
+            setToast("Live data is ready. Workflow checks are online.");
             setHasLoaded(true);
             return;
           }
@@ -236,6 +304,38 @@ export default function Home() {
     if (!hasLoaded || backendMode !== "local") return;
     window.localStorage.setItem("paper-dispatch-demo-state", JSON.stringify(state));
   }, [backendMode, hasLoaded, state]);
+
+  useEffect(() => {
+    if (!hasLoaded || backendMode !== "supabase" || isBusy) return;
+
+    let cancelled = false;
+    async function refresh() {
+      try {
+        const backendState = await loadBackendState();
+        if (!cancelled && backendState) {
+          setState(backendState);
+          setSelectedDispatchId((current) =>
+            backendState.dispatches.some((dispatch) => dispatch.id === current)
+              ? current
+              : (backendState.dispatches[0]?.id ?? ""),
+          );
+          setLastSynced(new Date());
+        }
+      } catch (error) {
+        console.error(error);
+      }
+    }
+
+    const timer = window.setInterval(() => void refresh(), 30_000);
+    const onFocus = () => void refresh();
+    window.addEventListener("focus", onFocus);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+      window.removeEventListener("focus", onFocus);
+    };
+  }, [backendMode, hasLoaded, isBusy]);
 
   const selectedDispatch = useMemo(
     () => state.dispatches.find((dispatch) => dispatch.id === selectedDispatchId) ?? state.dispatches[0],
@@ -298,6 +398,11 @@ export default function Home() {
     return { total, dispatched, blocked, awaiting, reservedKg, reservedReam };
   }, [state.dispatches, state.inventory]);
 
+  const visibleNavItems = useMemo(
+    () => navItems.filter((item) => currentUser && item.roles.includes(currentUser.role)),
+    [currentUser],
+  );
+
   function login(user: AppUser) {
     setCurrentUser(user);
     setActiveView("overview");
@@ -316,6 +421,7 @@ export default function Home() {
           setState(result.state);
           setSelectedDispatchId(result.dispatchId);
           setToast(result.message);
+          setLastSynced(new Date());
           return;
         }
       }
@@ -334,7 +440,34 @@ export default function Home() {
     }
   }
 
-  async function runAction(dispatchId: string, action: WorkflowAction) {
+  async function refreshNow() {
+    if (backendMode !== "supabase" || isBusy) return;
+    setIsBusy(true);
+    try {
+      const backendState = await loadBackendState();
+      if (backendState) {
+        setState(backendState);
+        setSelectedDispatchId((current) =>
+          backendState.dispatches.some((dispatch) => dispatch.id === current)
+            ? current
+            : (backendState.dispatches[0]?.id ?? ""),
+        );
+        setLastSynced(new Date());
+        setToast("Latest factory data loaded.");
+      }
+    } catch (error) {
+      console.error(error);
+      setToast(error instanceof Error ? error.message : "Refresh failed.");
+    } finally {
+      setIsBusy(false);
+    }
+  }
+
+  async function runAction(
+    dispatchId: string,
+    action: WorkflowAction,
+    input: WorkflowActionInput = {},
+  ) {
     if (!currentUser) return;
     if (isBusy) return;
     setIsBusy(true);
@@ -342,19 +475,29 @@ export default function Home() {
     try {
       const result =
         backendMode === "supabase"
-          ? await performBackendWorkflowAction(state, dispatchId, currentUser, action)
-          : performWorkflowAction(state, dispatchId, currentUser, action);
+          ? await performBackendWorkflowAction(state, dispatchId, currentUser, action, input)
+          : performWorkflowAction(state, dispatchId, currentUser, action, input);
 
       if (!result) return;
       setState(result.state);
       setSelectedDispatchId(result.dispatchId);
       setToast(result.message);
+      setLastSynced(new Date());
+      setPendingAction(null);
     } catch (error) {
       console.error(error);
       setToast(error instanceof Error ? error.message : "Workflow action failed.");
     } finally {
       setIsBusy(false);
     }
+  }
+
+  function requestAction(dispatchId: string, action: WorkflowAction) {
+    if (inputActions.includes(action)) {
+      setPendingAction({ dispatchId, action });
+      return;
+    }
+    void runAction(dispatchId, action);
   }
 
   async function handleCreate(input: CreateDispatchInput) {
@@ -373,6 +516,7 @@ export default function Home() {
       setSelectedDispatchId(result.dispatchId);
       setActiveView("details");
       setToast(result.message);
+      setLastSynced(new Date());
     } catch (error) {
       console.error(error);
       setToast(error instanceof Error ? error.message : "Create dispatch failed.");
@@ -385,32 +529,37 @@ export default function Home() {
     return <LoginScreen users={state.users} onLogin={login} />;
   }
 
+  const pageTitle =
+    activeView === "details"
+      ? "Job Details"
+      : (visibleNavItems.find((item) => item.id === activeView)?.label ?? "Home");
+
   return (
-    <main className="min-h-screen bg-[#f6f7f2] text-zinc-950">
-      <div className="flex min-h-screen">
-        <aside className="hidden w-72 shrink-0 border-r border-zinc-200 bg-white lg:flex lg:flex-col">
-          <div className="border-b border-zinc-200 px-5 py-5">
+    <main className="min-h-[100dvh] bg-[#f5f5f7] text-[#1d1d1f]">
+      <div className="flex min-h-[100dvh]">
+        <aside className="hidden w-[252px] shrink-0 border-r border-black/8 bg-[#fbfbfd]/95 backdrop-blur-xl lg:flex lg:flex-col">
+          <div className="px-5 pb-5 pt-6">
             <div className="flex items-center gap-3">
-              <div className="grid h-10 w-10 place-items-center rounded-md bg-emerald-700 text-white">
+              <div className="grid h-10 w-10 place-items-center rounded-lg bg-[#1d1d1f] text-white shadow-sm">
                 <Factory className="h-5 w-5" />
               </div>
-              <div>
-                <p className="text-sm font-semibold text-zinc-950">FG Dispatch Control</p>
-                <p className="text-xs text-zinc-500">Finished Goods Pilot</p>
+              <div className="min-w-0">
+                <p className="truncate text-sm font-semibold text-[#1d1d1f]">Paper Dispatch</p>
+                <p className="truncate text-xs text-[#6e6e73]">{roleGuidance[currentUser.role].title}</p>
               </div>
             </div>
           </div>
-          <nav className="flex-1 space-y-1 px-3 py-4">
-            {navItems.map((item) => (
+          <nav className="flex-1 space-y-1 px-3 py-2" aria-label="Main navigation">
+            {visibleNavItems.map((item) => (
               <button
                 key={item.id}
                 type="button"
                 onClick={() => setActiveView(item.id)}
                 className={clsx(
-                  "flex h-10 w-full items-center gap-3 rounded-md px-3 text-sm font-medium transition",
+                  "flex h-10 w-full items-center gap-3 rounded-lg px-3 text-sm font-medium transition active:scale-[0.98]",
                   activeView === item.id
-                    ? "bg-zinc-950 text-white"
-                    : "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-950",
+                    ? "bg-[#e8f1fb] text-[#0066cc]"
+                    : "text-[#515154] hover:bg-black/[0.045] hover:text-[#1d1d1f]",
                 )}
               >
                 <item.icon className="h-4 w-4" />
@@ -418,34 +567,36 @@ export default function Home() {
               </button>
             ))}
           </nav>
-          <div className="border-t border-zinc-200 p-4">
-            <div className="rounded-md border border-zinc-200 bg-zinc-50 p-3">
-              <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">Signed in</p>
-              <p className="mt-1 text-sm font-semibold">{currentUser.name}</p>
-              <p className="text-xs text-zinc-500">{roleLabels[currentUser.role]}</p>
+          <div className="border-t border-black/8 p-4">
+            <div className="flex items-center gap-3 px-1 py-1">
+              <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[#e8f1fb] text-sm font-semibold text-[#0066cc]">
+                {currentUser.name.charAt(0)}
+              </div>
+              <div className="min-w-0">
+                <p className="truncate text-sm font-semibold">{currentUser.name}</p>
+                <p className="truncate text-xs text-[#6e6e73]">{roleLabels[currentUser.role]}</p>
+              </div>
             </div>
           </div>
         </aside>
 
         <section className="min-w-0 flex-1">
-          <header className="sticky top-0 z-20 border-b border-zinc-200 bg-white/95 px-4 py-3 backdrop-blur lg:px-7">
-            <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">
-                  Paper manufacturing dispatch pilot
+          <header className="sticky top-0 z-20 border-b border-black/8 bg-[#f5f5f7]/88 px-4 py-3 backdrop-blur-xl lg:px-7">
+            <div className="mx-auto flex max-w-[1500px] flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+              <div className="min-w-0">
+                <h1 className="text-xl font-semibold tracking-normal text-[#1d1d1f]">{pageTitle}</h1>
+                <p className="mt-0.5 truncate text-sm text-[#6e6e73]">
+                  {roleGuidance[currentUser.role].duty}
                 </p>
-                <h1 className="mt-1 text-xl font-semibold tracking-normal text-zinc-950">
-                  Controlled Finished Goods Dispatch Tracking
-                </h1>
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <select
                   aria-label="Navigate dashboard"
                   value={activeView}
                   onChange={(event) => setActiveView(event.target.value as ViewId)}
-                  className="h-10 rounded-md border border-zinc-300 bg-white px-3 text-sm lg:hidden"
+                  className="h-10 rounded-lg border border-black/10 bg-white px-3 text-sm shadow-sm lg:hidden"
                 >
-                  {navItems.map((item) => (
+                  {visibleNavItems.map((item) => (
                     <option key={item.id} value={item.id}>
                       {item.label}
                     </option>
@@ -453,39 +604,53 @@ export default function Home() {
                 </select>
                 <button
                   type="button"
+                  onClick={refreshNow}
+                  disabled={isBusy || backendMode !== "supabase"}
+                  title="Load latest data"
+                  aria-label="Load latest data"
+                  className="grid h-10 w-10 place-items-center rounded-lg border border-black/10 bg-white text-[#515154] shadow-sm transition hover:bg-[#fbfbfd] active:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-45"
+                >
+                  <RefreshCw className={clsx("h-4 w-4", isBusy && "animate-spin")} />
+                </button>
+                <button
+                  type="button"
                   onClick={resetDemo}
                   disabled={isBusy}
-                  className="inline-flex h-10 items-center gap-2 rounded-md border border-zinc-300 bg-white px-3 text-sm font-medium text-zinc-700 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="inline-flex h-10 items-center gap-2 rounded-lg border border-black/10 bg-white px-3 text-sm font-medium text-[#515154] shadow-sm transition hover:bg-[#fbfbfd] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <RotateCcw className="h-4 w-4" />
-                  Reset
+                  Reset demo
                 </button>
-                <span className="inline-flex h-10 items-center gap-2 rounded-md border border-zinc-200 bg-zinc-50 px-3 text-sm font-medium text-zinc-700">
+                <span
+                  className="inline-flex h-10 items-center gap-2 rounded-lg border border-black/8 bg-white/70 px-3 text-sm font-medium text-[#515154]"
+                  title={lastSynced ? `Updated ${lastSynced.toLocaleTimeString()}` : "Connecting"}
+                >
                   <Database className="h-4 w-4" />
                   {backendMode === "supabase"
-                    ? "Supabase live"
+                    ? "Live"
                     : backendMode === "loading"
                       ? "Connecting"
-                      : "Local fallback"}
+                      : "Demo mode"}
                 </span>
                 <button
                   type="button"
                   onClick={() => setCurrentUser(null)}
-                  className="inline-flex h-10 items-center gap-2 rounded-md bg-zinc-950 px-3 text-sm font-medium text-white hover:bg-zinc-800"
+                  className="inline-flex h-10 items-center gap-2 rounded-lg bg-[#1d1d1f] px-3 text-sm font-medium text-white shadow-sm transition hover:bg-[#343437] active:scale-[0.98]"
                 >
                   <LogOut className="h-4 w-4" />
                   Sign out
                 </button>
               </div>
             </div>
-            <p className="mt-3 rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-700">
+            <p className="mx-auto mt-3 max-w-[1500px] rounded-lg border border-[#b8d7f4] bg-[#eef6fd] px-3 py-2 text-sm text-[#174f7a]">
               {toast}
             </p>
           </header>
 
-          <div className="px-4 py-5 lg:px-7">
+          <div className="mx-auto max-w-[1556px] px-4 py-5 lg:px-7 lg:py-7">
             {activeView === "overview" && (
               <Overview
+                currentUser={currentUser}
                 metrics={metrics}
                 dispatches={state.dispatches}
                 inventory={state.inventory}
@@ -508,7 +673,7 @@ export default function Home() {
                   setSelectedDispatchId(id);
                   setActiveView("details");
                 }}
-                onAction={runAction}
+                onAction={requestAction}
               />
             )}
 
@@ -526,7 +691,7 @@ export default function Home() {
                 dispatch={selectedDispatch}
                 inventory={state.inventory}
                 currentUser={currentUser}
-                onAction={(action) => runAction(selectedDispatch.id, action)}
+                onAction={(action) => requestAction(selectedDispatch.id, action)}
               />
             )}
 
@@ -542,7 +707,7 @@ export default function Home() {
                   setSelectedDispatchId(id);
                   setActiveView("details");
                 }}
-                onAction={runAction}
+                onAction={requestAction}
               />
             )}
 
@@ -554,6 +719,17 @@ export default function Home() {
           </div>
         </section>
       </div>
+      {pendingAction && (
+        <ActionDialog
+          action={pendingAction.action}
+          dispatch={state.dispatches.find((item) => item.id === pendingAction.dispatchId)!}
+          isBusy={isBusy}
+          onClose={() => setPendingAction(null)}
+          onSubmit={(input) =>
+            void runAction(pendingAction.dispatchId, pendingAction.action, input)
+          }
+        />
+      )}
     </main>
   );
 }
@@ -566,47 +742,61 @@ function LoginScreen({
   onLogin: (user: AppUser) => void;
 }) {
   return (
-    <main className="min-h-screen bg-[#f6f7f2] px-4 py-8 text-zinc-950">
-      <section className="mx-auto flex min-h-[calc(100vh-4rem)] max-w-6xl flex-col justify-center">
-        <div className="max-w-3xl">
-          <div className="mb-6 flex items-center gap-3">
-            <div className="grid h-11 w-11 place-items-center rounded-md bg-emerald-700 text-white">
-              <Factory className="h-5 w-5" />
+    <main className="min-h-[100dvh] bg-[#f5f5f7] px-4 py-6 text-[#1d1d1f] sm:px-6 lg:px-8">
+      <section className="mx-auto grid min-h-[calc(100dvh-3rem)] max-w-6xl items-center gap-10 lg:grid-cols-[0.88fr_1.12fr] lg:gap-16">
+        <div className="max-w-lg">
+          <div className="mb-8 grid h-14 w-14 place-items-center rounded-2xl bg-[#1d1d1f] text-white shadow-[0_16px_40px_rgba(29,29,31,0.18)]">
+            <Factory className="h-7 w-7" />
+          </div>
+          <h1 className="max-w-md text-4xl font-semibold leading-tight tracking-normal sm:text-5xl">
+            Paper Dispatch
+          </h1>
+          <p className="mt-4 max-w-md text-lg leading-7 text-[#515154]">
+            One live view from finished stock to factory gate.
+          </p>
+          <div className="mt-10 grid max-w-md grid-cols-3 gap-5 border-t border-black/10 pt-5 text-sm">
+            <div>
+              <p className="font-semibold">Live stock</p>
+              <p className="mt-1 text-[#6e6e73]">Supabase</p>
             </div>
             <div>
-              <p className="text-sm font-semibold uppercase tracking-wide text-emerald-700">
-                Reference pilot
-              </p>
-              <h1 className="text-3xl font-semibold tracking-normal sm:text-4xl">
-                Controlled Finished Goods Dispatch Tracking
-              </h1>
+              <p className="font-semibold">Rule checks</p>
+              <p className="mt-1 text-[#6e6e73]">n8n</p>
+            </div>
+            <div>
+              <p className="font-semibold">Role views</p>
+              <p className="mt-1 text-[#6e6e73]">5 teams</p>
             </div>
           </div>
-          <p className="text-base leading-7 text-zinc-700">
-            Role-based demo for factory dispatch control: approval, released-stock reservation,
-            vehicle movement, loading, weight verification, document checks, gate clearance, and
-            audit logging.
-          </p>
         </div>
 
-        <div className="mt-8 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-          {users.map((user) => (
-            <button
-              key={user.id}
-              type="button"
-              onClick={() => onLogin(user)}
-              className="min-h-44 rounded-md border border-zinc-200 bg-white p-4 text-left shadow-sm transition hover:border-emerald-600 hover:shadow-md"
-            >
-              <div className="mb-6 flex h-10 w-10 items-center justify-center rounded-md bg-zinc-950 text-white">
-                <UserCheck className="h-5 w-5" />
-              </div>
-              <p className="text-sm font-semibold text-zinc-950">{user.name}</p>
-              <p className="mt-1 text-sm text-zinc-600">{roleLabels[user.role]}</p>
-              <p className="mt-4 text-xs font-medium uppercase tracking-wide text-zinc-400">
-                {user.department}
-              </p>
-            </button>
-          ))}
+        <div className="overflow-hidden rounded-2xl border border-black/8 bg-white shadow-[0_24px_70px_rgba(29,29,31,0.10)]">
+          <div className="border-b border-black/8 px-5 py-5 sm:px-6">
+            <h2 className="text-xl font-semibold">Choose your work area</h2>
+            <p className="mt-1 text-sm text-[#6e6e73]">Each person sees only the work they need.</p>
+          </div>
+          <div className="p-2">
+            {users.map((user) => (
+              <button
+                key={user.id}
+                type="button"
+                onClick={() => onLogin(user)}
+                className="group flex min-h-20 w-full items-center gap-4 rounded-xl px-3 py-3 text-left transition hover:bg-[#f5f5f7] active:scale-[0.99] sm:px-4"
+              >
+                <div className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-[#eef6fd] text-[#0066cc]">
+                  <UserCheck className="h-5 w-5" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-baseline gap-x-2">
+                    <p className="font-semibold">{roleLabels[user.role]}</p>
+                    <p className="text-sm text-[#6e6e73]">{user.name}</p>
+                  </div>
+                  <p className="mt-1 text-sm text-[#515154]">{roleGuidance[user.role].duty}</p>
+                </div>
+                <ChevronRight className="h-5 w-5 shrink-0 text-[#86868b] transition group-hover:translate-x-0.5 group-hover:text-[#0066cc]" />
+              </button>
+            ))}
+          </div>
         </div>
       </section>
     </main>
@@ -627,17 +817,17 @@ function MetricTile({
   tone?: "neutral" | "green" | "amber" | "red";
 }) {
   return (
-    <section className="rounded-md border border-zinc-200 bg-white p-4 shadow-sm">
+    <section className="min-h-32 rounded-xl border border-black/8 bg-white p-4 shadow-[0_10px_28px_rgba(29,29,31,0.05)]">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">{label}</p>
-          <p className="mt-2 text-2xl font-semibold text-zinc-950">{value}</p>
-          <p className="mt-1 text-sm text-zinc-600">{detail}</p>
+          <p className="text-sm font-medium text-[#6e6e73]">{label}</p>
+          <p className="mt-2 text-2xl font-semibold text-[#1d1d1f]">{value}</p>
+          <p className="mt-1 text-sm text-[#6e6e73]">{detail}</p>
         </div>
         <div
           className={clsx(
-            "grid h-10 w-10 shrink-0 place-items-center rounded-md",
-            tone === "neutral" && "bg-zinc-100 text-zinc-700",
+            "grid h-10 w-10 shrink-0 place-items-center rounded-lg",
+            tone === "neutral" && "bg-[#eef6fd] text-[#0066cc]",
             tone === "green" && "bg-emerald-50 text-emerald-700",
             tone === "amber" && "bg-amber-50 text-amber-800",
             tone === "red" && "bg-rose-50 text-rose-700",
@@ -651,12 +841,14 @@ function MetricTile({
 }
 
 function Overview({
+  currentUser,
   metrics,
   dispatches,
   inventory,
   activeExceptions,
   onSelect,
 }: {
+  currentUser: AppUser;
   metrics: {
     total: number;
     dispatched: number;
@@ -670,7 +862,30 @@ function Overview({
   activeExceptions: number;
   onSelect: (id: string) => void;
 }) {
-  const liveDispatches = dispatches.filter((item) => !terminalStatuses.includes(item.status)).slice(0, 6);
+  const taskDispatches = dispatches
+    .filter((dispatch) =>
+      getAvailableActions(dispatch, currentUser.role).some((action) => action !== "CANCEL"),
+    )
+    .sort((a, b) => {
+      const aScore = (a.controlStatus === "BLOCKED" ? 2 : 0) + (a.priority === "URGENT" ? 1 : 0);
+      const bScore = (b.controlStatus === "BLOCKED" ? 2 : 0) + (b.priority === "URGENT" ? 1 : 0);
+      return bScore - aScore;
+    })
+    .slice(0, 7);
+  const activeJobs = dispatches.filter((item) => !terminalStatuses.includes(item.status)).length;
+  const drafts = dispatches.filter((item) => item.status === "DRAFT").length;
+  const trucksToBook = dispatches.filter((item) => item.status === "APPROVED").length;
+  const loadingJobs = dispatches.filter((item) =>
+    ["VEHICLE_ARRIVED", "LOADING"].includes(item.status),
+  ).length;
+  const weightChecks = dispatches.filter((item) => item.status === "AWAITING_WEIGHT_CHECK").length;
+  const approvals = dispatches.filter((item) => item.status === "AWAITING_APPROVAL").length;
+  const paperChecks = dispatches.filter((item) => item.status === "AWAITING_DOCUMENT_CHECK").length;
+  const trucksExpected = dispatches.filter((item) => item.status === "VEHICLE_ASSIGNED").length;
+  const gateJobs = dispatches.filter((item) =>
+    ["AWAITING_GATE_CLEARANCE", "CLEARED_FOR_EXIT"].includes(item.status),
+  ).length;
+  const stockHolds = inventory.filter((batch) => batch.qualityStatus !== "RELEASED").length;
   const releasedKg = inventory
     .filter((batch) => batch.unit === "KG" && batch.qualityStatus === "RELEASED")
     .reduce((sum, batch) => sum + availableQty(batch), 0);
@@ -678,100 +893,131 @@ function Overview({
     .filter((batch) => batch.unit === "REAM" && batch.qualityStatus === "RELEASED")
     .reduce((sum, batch) => sum + availableQty(batch), 0);
 
+  const roleMetrics: Record<
+    UserRole,
+    Array<{
+      label: string;
+      value: string;
+      detail: string;
+      icon: ComponentType<{ className?: string }>;
+      tone?: "neutral" | "green" | "amber" | "red";
+    }>
+  > = {
+    DISPATCH_CLERK: [
+      { label: "My Work", value: String(taskDispatches.length), detail: "Jobs ready for you", icon: ClipboardCheck },
+      { label: "Draft Jobs", value: String(drafts), detail: "Send for approval", icon: FileText },
+      { label: "Book Truck", value: String(trucksToBook), detail: "Approved jobs", icon: Truck, tone: "amber" },
+      { label: "Live Jobs", value: String(activeJobs), detail: "Moving through the factory", icon: Factory, tone: "green" },
+    ],
+    WAREHOUSE_QUALITY: [
+      { label: "My Work", value: String(taskDispatches.length), detail: "Jobs ready for your team", icon: ClipboardCheck },
+      { label: "Load Now", value: String(loadingJobs), detail: "Truck at gate or loading", icon: PackageCheck, tone: "green" },
+      { label: "Check Weight", value: String(weightChecks), detail: "Loading is complete", icon: Gauge, tone: "amber" },
+      { label: "Stock Hold", value: String(stockHolds), detail: "Not available for dispatch", icon: AlertTriangle, tone: stockHolds ? "red" : "green" },
+    ],
+    DISPATCH_SUPERVISOR: [
+      { label: "My Work", value: String(taskDispatches.length), detail: "Jobs needing control", icon: ClipboardCheck },
+      { label: "Approve", value: String(approvals), detail: "Stock check is complete", icon: ShieldCheck, tone: "amber" },
+      { label: "Check Papers", value: String(paperChecks), detail: "Ready for document check", icon: FileCheck2 },
+      { label: "Problems", value: String(activeExceptions), detail: "Open dispatch blocks", icon: AlertTriangle, tone: activeExceptions ? "red" : "green" },
+    ],
+    GATE_SECURITY: [
+      { label: "My Work", value: String(taskDispatches.length), detail: "Gate actions ready", icon: ClipboardCheck },
+      { label: "Trucks Due", value: String(trucksExpected), detail: "Booked for arrival", icon: Truck, tone: "amber" },
+      { label: "Gate Check", value: String(gateJobs), detail: "Ready to clear or leave", icon: ShieldCheck },
+      { label: "Left Today", value: String(metrics.dispatched), detail: "Exit confirmed", icon: CheckCircle2, tone: "green" },
+    ],
+    MANAGER_ADMIN: [
+      { label: "Live Jobs", value: String(activeJobs), detail: `${metrics.total} jobs in the system`, icon: Factory },
+      { label: "Needs Action", value: String(taskDispatches.length), detail: "Ready for a next step", icon: ClipboardCheck, tone: "amber" },
+      { label: "Problems", value: String(activeExceptions), detail: "Open dispatch blocks", icon: AlertTriangle, tone: activeExceptions ? "red" : "green" },
+      { label: "Completed", value: String(metrics.dispatched), detail: "Trucks left the factory", icon: CheckCircle2, tone: "green" },
+    ],
+  };
+
   return (
-    <div className="space-y-5">
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-        <MetricTile
-          label="Dispatches Today"
-          value={String(metrics.total)}
-          detail={`${metrics.dispatched} completed, ${metrics.awaiting} awaiting control`}
-          icon={ClipboardCheck}
-        />
-        <MetricTile
-          label="Active Blocks"
-          value={String(activeExceptions)}
-          detail={`${metrics.blocked} dispatch records need attention`}
-          icon={AlertTriangle}
-          tone={activeExceptions > 0 ? "red" : "green"}
-        />
-        <MetricTile
-          label="Released Reel Stock"
-          value={`${formatNumber(releasedKg)} KG`}
-          detail={`${formatNumber(metrics.reservedKg)} KG currently reserved`}
-          icon={PackageCheck}
-          tone="green"
-        />
-        <MetricTile
-          label="Released Sheet Stock"
-          value={`${formatNumber(releasedReam)} REAM`}
-          detail={`${formatNumber(metrics.reservedReam)} REAM currently reserved`}
-          icon={Boxes}
-          tone="amber"
-        />
+    <div className="space-y-6">
+      <section>
+        <h2 className="text-2xl font-semibold">Good day, {currentUser.name.split(" ")[0]}</h2>
+        <p className="mt-1 text-sm text-[#6e6e73]">Here is the work ready for your role.</p>
+      </section>
+
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        {roleMetrics[currentUser.role].map((metric) => (
+          <MetricTile key={metric.label} {...metric} />
+        ))}
       </div>
 
-      <section className="rounded-md border border-zinc-200 bg-white shadow-sm">
-        <div className="flex flex-col gap-2 border-b border-zinc-200 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+      <section className="overflow-hidden rounded-xl border border-black/8 bg-white shadow-[0_12px_35px_rgba(29,29,31,0.06)]">
+        <div className="flex flex-col gap-2 border-b border-black/8 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h2 className="text-base font-semibold">Live Dispatch Board</h2>
-            <p className="text-sm text-zinc-600">Open items across approval, loading, checks, and gate control.</p>
+            <h2 className="text-base font-semibold">Your next jobs</h2>
+            <p className="text-sm text-[#6e6e73]">Open a job to see details or do the next step.</p>
           </div>
-          <span className="text-sm font-medium text-zinc-500">Factory date: 15 Jul 2026</span>
+          <span className="text-sm font-medium text-[#6e6e73]">{taskDispatches.length} ready</span>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[860px] text-left text-sm">
-            <thead className="bg-zinc-50 text-xs uppercase tracking-wide text-zinc-500">
+          <table className="w-full min-w-[780px] text-left text-sm">
+            <thead className="bg-[#fbfbfd] text-xs font-medium text-[#6e6e73]">
               <tr>
-                <th className="px-4 py-3">Request</th>
-                <th className="px-4 py-3">Customer</th>
-                <th className="px-4 py-3">Status</th>
-                <th className="px-4 py-3">Control</th>
-                <th className="px-4 py-3">Age</th>
-                <th className="px-4 py-3">Progress</th>
-                <th className="px-4 py-3"></th>
+                <th className="px-5 py-3">Job</th>
+                <th className="px-5 py-3">Customer</th>
+                <th className="px-5 py-3">Stage</th>
+                <th className="px-5 py-3">Next step</th>
+                <th className="px-5 py-3"><span className="sr-only">Open</span></th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-zinc-100">
-              {liveDispatches.map((dispatch) => (
-                <tr key={dispatch.id} className="hover:bg-zinc-50">
-                  <td className="px-4 py-3 font-medium">{dispatch.requestNo}</td>
-                  <td className="px-4 py-3">
-                    <p className="font-medium">{dispatch.customerName}</p>
-                    <p className="text-xs text-zinc-500">{dispatch.destination}</p>
+            <tbody>
+              {taskDispatches.map((dispatch) => {
+                const nextAction = getAvailableActions(dispatch, currentUser.role).find(
+                  (action) => action !== "CANCEL",
+                );
+                return (
+                <tr key={dispatch.id} className="border-t border-black/6 transition hover:bg-[#fbfbfd]">
+                  <td className="px-5 py-3.5">
+                    <p className="font-semibold">{dispatch.requestNo}</p>
+                    <p className="mt-0.5 text-xs text-[#6e6e73]">{getLineSummary(dispatch)}</p>
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="px-5 py-3.5">
+                    <p className="font-medium">{dispatch.customerName}</p>
+                    <p className="text-xs text-[#6e6e73]">{dispatch.destination}</p>
+                  </td>
+                  <td className="px-5 py-3.5">
                     <span className={statusClasses(dispatch.status)}>{statusLabels[dispatch.status]}</span>
                   </td>
-                  <td className="px-4 py-3">
-                    <span className={controlClasses(dispatch.controlStatus)}>
-                      {getControlIcon(dispatch.controlStatus)}
-                      {dispatch.controlStatus}
-                    </span>
+                  <td className="px-5 py-3.5 font-medium text-[#0066cc]">
+                    {nextAction ? actionLabels[nextAction] : "Open job"}
                   </td>
-                  <td className="px-4 py-3">{getDispatchAgeHours(dispatch)}h</td>
-                  <td className="px-4 py-3">
-                    <div className="h-2 w-32 rounded-full bg-zinc-100">
-                      <div
-                        className="h-2 rounded-full bg-emerald-600"
-                        style={{ width: `${getWorkflowProgress(dispatch.status)}%` }}
-                      />
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 text-right">
+                  <td className="px-5 py-3.5 text-right">
                     <button
                       type="button"
                       onClick={() => onSelect(dispatch.id)}
-                      className="inline-flex h-9 items-center gap-2 rounded-md border border-zinc-300 px-3 text-sm font-medium hover:bg-zinc-50"
+                      className="inline-flex h-9 items-center gap-1 rounded-lg px-3 text-sm font-semibold text-[#0066cc] transition hover:bg-[#eef6fd] active:scale-[0.97]"
                     >
                       Open
-                      <ArrowRight className="h-4 w-4" />
+                      <ChevronRight className="h-4 w-4" />
                     </button>
                   </td>
                 </tr>
-              ))}
+              )})}
+              {taskDispatches.length === 0 && (
+                <tr className="border-t border-black/6">
+                  <td colSpan={5} className="px-5 py-12 text-center">
+                    <CheckCircle2 className="mx-auto h-6 w-6 text-emerald-600" />
+                    <p className="mt-3 font-semibold">No work waiting</p>
+                    <p className="mt-1 text-sm text-[#6e6e73]">Your role is up to date.</p>
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
+        {currentUser.role === "MANAGER_ADMIN" && (
+          <div className="grid gap-3 border-t border-black/8 bg-[#fbfbfd] px-5 py-4 text-sm sm:grid-cols-2">
+            <p><span className="font-semibold">Released reels:</span> {formatNumber(releasedKg)} KG</p>
+            <p><span className="font-semibold">Released sheets:</span> {formatNumber(releasedReam)} REAM</p>
+          </div>
+        )}
       </section>
     </div>
   );
@@ -795,42 +1041,45 @@ function DispatchList({
   onAction: (dispatchId: string, action: WorkflowAction) => void;
 }) {
   return (
-    <section className="rounded-md border border-zinc-200 bg-white shadow-sm">
-      <div className="flex flex-col gap-3 border-b border-zinc-200 px-4 py-3 xl:flex-row xl:items-center xl:justify-between">
+    <section className="overflow-hidden rounded-xl border border-black/8 bg-white shadow-[0_12px_35px_rgba(29,29,31,0.06)]">
+      <div className="flex flex-col gap-3 border-b border-black/8 px-5 py-4 xl:flex-row xl:items-center xl:justify-between">
         <div>
-          <h2 className="text-base font-semibold">Dispatch List</h2>
-          <p className="text-sm text-zinc-600">Search and act on dispatch requests by role.</p>
+          <h2 className="text-base font-semibold">All jobs</h2>
+          <p className="text-sm text-[#6e6e73]">Every change here appears across the dashboard.</p>
         </div>
         <div className="relative w-full xl:w-96">
-          <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-zinc-400" />
+          <Search className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-[#86868b]" />
           <input
             value={searchTerm}
             onChange={(event) => onSearch(event.target.value)}
-            className="h-10 w-full rounded-md border border-zinc-300 bg-white pl-9 pr-3 text-sm outline-none focus:border-emerald-600"
-            placeholder="Search request, customer, status..."
+            className="h-10 w-full rounded-lg border border-black/12 bg-[#f5f5f7] pl-9 pr-3 text-sm outline-none transition focus:border-[#0071e3] focus:bg-white focus:ring-2 focus:ring-[#0071e3]/15"
+            placeholder="Search job, customer, stage"
           />
         </div>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full min-w-[1040px] text-left text-sm">
-          <thead className="bg-zinc-50 text-xs uppercase tracking-wide text-zinc-500">
+          <thead className="bg-[#fbfbfd] text-xs font-medium text-[#6e6e73]">
             <tr>
-              <th className="px-4 py-3">Request</th>
+              <th className="px-4 py-3">Job</th>
               <th className="px-4 py-3">Customer</th>
-              <th className="px-4 py-3">Product</th>
-              <th className="px-4 py-3">Status</th>
-              <th className="px-4 py-3">Control</th>
-              <th className="px-4 py-3">Vehicle</th>
-              <th className="px-4 py-3">Role Actions</th>
+              <th className="px-4 py-3">Goods</th>
+              <th className="px-4 py-3">Stage</th>
+              <th className="px-4 py-3">Check</th>
+              <th className="px-4 py-3">Truck</th>
+              <th className="px-4 py-3">Next step</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-zinc-100">
+          <tbody>
             {dispatches.map((dispatch) => {
               const actions = getAvailableActions(dispatch, currentUser.role).slice(0, 2);
               return (
                 <tr
                   key={dispatch.id}
-                  className={clsx("hover:bg-zinc-50", selectedId === dispatch.id && "bg-emerald-50/40")}
+                  className={clsx(
+                    "border-t border-black/6 transition hover:bg-[#fbfbfd]",
+                    selectedId === dispatch.id && "bg-[#eef6fd]",
+                  )}
                 >
                   <td className="px-4 py-3">
                     <button
@@ -840,43 +1089,48 @@ function DispatchList({
                     >
                       {dispatch.requestNo}
                     </button>
-                    <p className="text-xs text-zinc-500">{formatDate(dispatch.requestedDispatchDate)}</p>
+                    <p className="text-xs text-[#6e6e73]">{formatDate(dispatch.requestedDispatchDate)}</p>
                   </td>
                   <td className="px-4 py-3">
                     <p className="font-medium">{dispatch.customerName}</p>
-                    <p className="text-xs text-zinc-500">{dispatch.destination}</p>
+                    <p className="text-xs text-[#6e6e73]">{dispatch.destination}</p>
                   </td>
-                  <td className="max-w-xs px-4 py-3 text-zinc-700">{getLineSummary(dispatch)}</td>
+                  <td className="max-w-xs px-4 py-3 text-[#515154]">{getLineSummary(dispatch)}</td>
                   <td className="px-4 py-3">
                     <span className={statusClasses(dispatch.status)}>{statusLabels[dispatch.status]}</span>
                   </td>
                   <td className="px-4 py-3">
                     <span className={controlClasses(dispatch.controlStatus)}>
                       {getControlIcon(dispatch.controlStatus)}
-                      {dispatch.controlStatus}
+                      {controlLabels[dispatch.controlStatus]}
                     </span>
                   </td>
                   <td className="px-4 py-3">
                     {dispatch.vehicle ? (
                       <div>
                         <p className="font-medium">{dispatch.vehicle.vehicleNo}</p>
-                        <p className="text-xs text-zinc-500">{dispatch.vehicle.transporter}</p>
+                        <p className="text-xs text-[#6e6e73]">{dispatch.vehicle.transporter}</p>
                       </div>
                     ) : (
-                      <span className="text-zinc-400">Not assigned</span>
+                      <span className="text-[#86868b]">Not booked</span>
                     )}
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex flex-wrap gap-2">
                       {actions.length === 0 ? (
-                        <span className="text-xs text-zinc-400">No action for role</span>
+                        <span className="text-xs text-[#86868b]">View only</span>
                       ) : (
                         actions.map((action) => (
                           <button
                             key={action}
                             type="button"
                             onClick={() => onAction(dispatch.id, action)}
-                            className="inline-flex h-9 items-center gap-2 rounded-md bg-zinc-950 px-3 text-xs font-semibold text-white hover:bg-zinc-800"
+                            className={clsx(
+                              "inline-flex h-9 items-center gap-2 rounded-lg px-3 text-xs font-semibold text-white transition active:scale-[0.97]",
+                              action === "CANCEL" || action === "REJECT"
+                                ? "bg-rose-700 hover:bg-rose-800"
+                                : "bg-[#0071e3] hover:bg-[#0068d1]",
+                            )}
                           >
                             <Send className="h-3.5 w-3.5" />
                             {actionLabels[action]}
@@ -917,20 +1171,20 @@ function CreateDispatch({
   });
   const product = products.find((item) => item.code === form.productCode) ?? products[0];
   const allowed = ["DISPATCH_CLERK", "MANAGER_ADMIN"].includes(currentUser.role);
+  const fieldClass =
+    "h-11 w-full rounded-lg border border-black/15 bg-white px-3 text-sm outline-none transition focus:border-[#0071e3] focus:ring-2 focus:ring-[#0071e3]/15";
 
   return (
     <section className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_380px]">
-      <div className="rounded-md border border-zinc-200 bg-white p-4 shadow-sm">
+      <div className="rounded-xl border border-black/8 bg-white p-5 shadow-[0_12px_35px_rgba(29,29,31,0.06)] sm:p-6">
         <div className="mb-5">
-          <h2 className="text-base font-semibold">Create Dispatch</h2>
-          <p className="text-sm text-zinc-600">
-            Dispatch starts after customer order/request exists. Production and accounting are outside scope.
-          </p>
+          <h2 className="text-lg font-semibold">Create a new job</h2>
+          <p className="mt-1 text-sm text-[#6e6e73]">Enter the customer, goods, quantity, and date.</p>
         </div>
 
         {!allowed && (
           <div className="mb-4 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-            Current role can view this page, but only Dispatch Clerk or Manager/Admin can create a request.
+            Only a dispatch worker or factory manager can create a job.
           </div>
         )}
 
@@ -943,22 +1197,22 @@ function CreateDispatch({
           }}
         >
           <label className="space-y-1">
-            <span className="text-sm font-medium">Customer Name</span>
+            <span className="text-sm font-medium">Customer</span>
             <input
               value={form.customerName}
               onChange={(event) => setForm({ ...form, customerName: event.target.value })}
-              className="h-10 w-full rounded-md border border-zinc-300 px-3 text-sm outline-none focus:border-emerald-600"
+              className={fieldClass}
             />
           </label>
 
           <label className="space-y-1">
-            <span className="text-sm font-medium">Customer Type</span>
+            <span className="text-sm font-medium">Customer type</span>
             <select
               value={form.customerType}
               onChange={(event) =>
                 setForm({ ...form, customerType: event.target.value as CreateDispatchInput["customerType"] })
               }
-              className="h-10 w-full rounded-md border border-zinc-300 bg-white px-3 text-sm outline-none focus:border-emerald-600"
+              className={fieldClass}
             >
               <option value="DISTRIBUTOR">Distributor</option>
               <option value="WHOLESALER">Wholesaler</option>
@@ -967,30 +1221,30 @@ function CreateDispatch({
           </label>
 
           <label className="space-y-1">
-            <span className="text-sm font-medium">Destination</span>
+            <span className="text-sm font-medium">Delivery city</span>
             <input
               value={form.destination}
               onChange={(event) => setForm({ ...form, destination: event.target.value })}
-              className="h-10 w-full rounded-md border border-zinc-300 px-3 text-sm outline-none focus:border-emerald-600"
+              className={fieldClass}
             />
           </label>
 
           <label className="space-y-1">
-            <span className="text-sm font-medium">Requested Date</span>
+            <span className="text-sm font-medium">Dispatch date</span>
             <input
               type="date"
               value={form.requestedDispatchDate}
               onChange={(event) => setForm({ ...form, requestedDispatchDate: event.target.value })}
-              className="h-10 w-full rounded-md border border-zinc-300 px-3 text-sm outline-none focus:border-emerald-600"
+              className={fieldClass}
             />
           </label>
 
           <label className="space-y-1 md:col-span-2">
-            <span className="text-sm font-medium">Product</span>
+            <span className="text-sm font-medium">Goods</span>
             <select
               value={form.productCode}
               onChange={(event) => setForm({ ...form, productCode: event.target.value })}
-              className="h-10 w-full rounded-md border border-zinc-300 bg-white px-3 text-sm outline-none focus:border-emerald-600"
+              className={fieldClass}
             >
               {products.map((item) => (
                 <option key={item.code} value={item.code}>
@@ -1001,7 +1255,7 @@ function CreateDispatch({
           </label>
 
           <label className="space-y-1">
-            <span className="text-sm font-medium">Requested Quantity</span>
+            <span className="text-sm font-medium">Quantity</span>
             <input
               type="number"
               min={1}
@@ -1009,18 +1263,18 @@ function CreateDispatch({
               onChange={(event) =>
                 setForm({ ...form, requestedQty: Number(event.target.value || 0) })
               }
-              className="h-10 w-full rounded-md border border-zinc-300 px-3 text-sm outline-none focus:border-emerald-600"
+              className={fieldClass}
             />
           </label>
 
           <label className="space-y-1">
-            <span className="text-sm font-medium">Priority</span>
+            <span className="text-sm font-medium">Urgency</span>
             <select
               value={form.priority}
               onChange={(event) =>
                 setForm({ ...form, priority: event.target.value as CreateDispatchInput["priority"] })
               }
-              className="h-10 w-full rounded-md border border-zinc-300 bg-white px-3 text-sm outline-none focus:border-emerald-600"
+              className={fieldClass}
             >
               <option value="NORMAL">Normal</option>
               <option value="URGENT">Urgent</option>
@@ -1031,17 +1285,17 @@ function CreateDispatch({
             <button
               type="submit"
               disabled={!allowed}
-              className="inline-flex h-10 items-center gap-2 rounded-md bg-emerald-700 px-4 text-sm font-semibold text-white hover:bg-emerald-800 disabled:cursor-not-allowed disabled:bg-zinc-300"
+              className="inline-flex h-10 items-center gap-2 rounded-lg bg-[#0071e3] px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-[#0068d1] active:scale-[0.98] disabled:cursor-not-allowed disabled:bg-zinc-300"
             >
               <Plus className="h-4 w-4" />
-              Create Draft
+              Save Draft
             </button>
           </div>
         </form>
       </div>
 
-      <aside className="rounded-md border border-zinc-200 bg-white p-4 shadow-sm">
-        <h3 className="text-sm font-semibold">Selected Product Control</h3>
+      <aside className="rounded-xl border border-black/8 bg-white p-5 shadow-[0_12px_35px_rgba(29,29,31,0.06)]">
+        <h3 className="text-sm font-semibold">Stock check</h3>
         {product && (
           <div className="mt-4 space-y-3 text-sm">
             <InfoRow label="Product" value={product.name} />
@@ -1050,7 +1304,7 @@ function CreateDispatch({
             <InfoRow label="Attributes" value={`${product.gsm} GSM, ${product.grade}, ${product.shade}`} />
             <InfoRow label="Size" value={product.size} />
             <InfoRow
-              label="Released Available"
+              label="Ready stock"
               value={`${formatNumber(releasedAvailableQty(inventory, product.code))} ${product.unit}`}
             />
           </div>
@@ -1075,7 +1329,7 @@ function DispatchDetails({
 
   return (
     <div className="space-y-5">
-      <section className="rounded-md border border-zinc-200 bg-white p-4 shadow-sm">
+      <section className="rounded-xl border border-black/8 bg-white p-5 shadow-[0_12px_35px_rgba(29,29,31,0.06)]">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
           <div>
             <div className="flex flex-wrap items-center gap-2">
@@ -1083,7 +1337,7 @@ function DispatchDetails({
               <span className={statusClasses(dispatch.status)}>{statusLabels[dispatch.status]}</span>
               <span className={controlClasses(dispatch.controlStatus)}>
                 {getControlIcon(dispatch.controlStatus)}
-                {dispatch.controlStatus}
+                {controlLabels[dispatch.controlStatus]}
               </span>
             </div>
             <p className="mt-1 text-sm text-zinc-600">
@@ -1092,8 +1346,8 @@ function DispatchDetails({
           </div>
           <div className="flex flex-wrap gap-2">
             {actions.length === 0 ? (
-              <span className="rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-500">
-                No action available for {roleLabels[currentUser.role]}
+              <span className="rounded-lg bg-[#f5f5f7] px-3 py-2 text-sm text-[#6e6e73]">
+                No step for you now
               </span>
             ) : (
               actions.map((action) => (
@@ -1102,12 +1356,12 @@ function DispatchDetails({
                   type="button"
                   onClick={() => onAction(action)}
                   className={clsx(
-                    "inline-flex h-10 items-center gap-2 rounded-md px-3 text-sm font-semibold",
+                    "inline-flex h-10 items-center gap-2 rounded-lg px-3 text-sm font-semibold text-white transition active:scale-[0.98]",
                     action === "RESOLVE_EXCEPTION"
-                      ? "bg-amber-500 text-zinc-950 hover:bg-amber-400"
+                      ? "bg-amber-600 hover:bg-amber-700"
                       : action === "CANCEL" || action === "REJECT"
                         ? "bg-rose-700 text-white hover:bg-rose-800"
-                        : "bg-zinc-950 text-white hover:bg-zinc-800",
+                        : "bg-[#0071e3] hover:bg-[#0068d1]",
                   )}
                 >
                   <Send className="h-4 w-4" />
@@ -1130,19 +1384,19 @@ function DispatchDetails({
       </section>
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1.15fr)_minmax(340px,0.85fr)]">
-        <section className="rounded-md border border-zinc-200 bg-white shadow-sm">
-          <div className="border-b border-zinc-200 px-4 py-3">
-            <h3 className="text-base font-semibold">Dispatch Lines</h3>
+        <section className="overflow-hidden rounded-xl border border-black/8 bg-white shadow-[0_12px_35px_rgba(29,29,31,0.06)]">
+          <div className="border-b border-black/8 px-5 py-4">
+            <h3 className="text-base font-semibold">Goods</h3>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full min-w-[760px] text-left text-sm">
-              <thead className="bg-zinc-50 text-xs uppercase tracking-wide text-zinc-500">
+              <thead className="bg-[#fbfbfd] text-xs font-medium text-[#6e6e73]">
                 <tr>
-                  <th className="px-4 py-3">Product</th>
+                  <th className="px-4 py-3">Paper</th>
                   <th className="px-4 py-3">Type</th>
-                  <th className="px-4 py-3">Qty</th>
-                  <th className="px-4 py-3">Released Stock</th>
-                  <th className="px-4 py-3">Reserved Batches</th>
+                  <th className="px-4 py-3">Quantity</th>
+                  <th className="px-4 py-3">Ready stock</th>
+                  <th className="px-4 py-3">Reserved lot</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-100">
@@ -1161,9 +1415,13 @@ function DispatchDetails({
                     </td>
                     <td className="px-4 py-3">
                       {line.reservedBatchIds.length > 0 ? (
-                        <span className="font-medium">{line.reservedBatchIds.join(", ")}</span>
+                          <span className="font-medium">
+                            {line.reservedBatchIds
+                              .map((id) => inventory.find((batch) => batch.id === id)?.batchNo ?? id.slice(0, 8))
+                              .join(", ")}
+                          </span>
                       ) : (
-                        <span className="text-zinc-400">Not reserved</span>
+                          <span className="text-[#86868b]">Not reserved</span>
                       )}
                     </td>
                   </tr>
@@ -1173,20 +1431,20 @@ function DispatchDetails({
           </div>
         </section>
 
-        <section className="rounded-md border border-zinc-200 bg-white p-4 shadow-sm">
-          <h3 className="text-base font-semibold">Operational Controls</h3>
+        <section className="rounded-xl border border-black/8 bg-white p-5 shadow-[0_12px_35px_rgba(29,29,31,0.06)]">
+          <h3 className="text-base font-semibold">Job facts</h3>
           <div className="mt-4 space-y-3 text-sm">
-            <InfoRow label="Created By" value={dispatch.createdBy} />
+            <InfoRow label="Created by" value={dispatch.createdBy} />
             <InfoRow label="Created" value={formatDateTime(dispatch.createdAt)} />
-            <InfoRow label="Requested Date" value={formatDate(dispatch.requestedDispatchDate)} />
-            <InfoRow label="Priority" value={dispatch.priority} />
-            <InfoRow label="Approved By" value={dispatch.approvedBy ?? "Pending"} />
+            <InfoRow label="Dispatch date" value={formatDate(dispatch.requestedDispatchDate)} />
+            <InfoRow label="Urgency" value={dispatch.priority === "URGENT" ? "Urgent" : "Normal"} />
+            <InfoRow label="Approved by" value={dispatch.approvedBy ?? "Waiting"} />
             <InfoRow
               label="Weight"
               value={
                 dispatch.expectedWeightKg
-                  ? `${formatNumber(dispatch.actualWeightKg ?? 0)} / ${formatNumber(dispatch.expectedWeightKg)} KG`
-                  : "Not applicable for REAM"
+                  ? `${dispatch.actualWeightKg ? formatNumber(dispatch.actualWeightKg) : "Waiting"} / ${formatNumber(dispatch.expectedWeightKg)} KG`
+                  : "Not needed for reams"
               }
             />
             <InfoRow label="Tolerance" value={`${dispatch.weightTolerancePercent}%`} />
@@ -1195,28 +1453,28 @@ function DispatchDetails({
       </div>
 
       <div className="grid gap-5 xl:grid-cols-2">
-        <section className="rounded-md border border-zinc-200 bg-white p-4 shadow-sm">
-          <h3 className="text-base font-semibold">Vehicle and Gate</h3>
+        <section className="rounded-xl border border-black/8 bg-white p-5 shadow-[0_12px_35px_rgba(29,29,31,0.06)]">
+          <h3 className="text-base font-semibold">Truck and gate</h3>
           {dispatch.vehicle ? (
             <div className="mt-4 space-y-3 text-sm">
-              <InfoRow label="Vehicle No." value={dispatch.vehicle.vehicleNo} />
-              <InfoRow label="Transporter" value={dispatch.vehicle.transporter} />
+              <InfoRow label="Truck number" value={dispatch.vehicle.vehicleNo} />
+              <InfoRow label="Transport company" value={dispatch.vehicle.transporter} />
               <InfoRow label="Driver" value={dispatch.vehicle.driverName} />
               <InfoRow label="Phone" value={dispatch.vehicle.driverPhone} />
-              <InfoRow label="Expected Arrival" value={formatDateTime(dispatch.vehicle.expectedArrival)} />
+              <InfoRow label="Expected arrival" value={formatDateTime(dispatch.vehicle.expectedArrival)} />
             </div>
           ) : (
-            <p className="mt-4 text-sm text-zinc-500">Vehicle assignment happens after approval and reservation.</p>
+            <p className="mt-4 text-sm text-[#6e6e73]">The dispatch worker books a truck after approval.</p>
           )}
         </section>
 
-        <section className="rounded-md border border-zinc-200 bg-white p-4 shadow-sm">
-          <h3 className="text-base font-semibold">Document Verification</h3>
+        <section className="rounded-xl border border-black/8 bg-white p-5 shadow-[0_12px_35px_rgba(29,29,31,0.06)]">
+          <h3 className="text-base font-semibold">Papers</h3>
           <div className="mt-4 grid gap-2 sm:grid-cols-2">
             {dispatch.documents.map((doc) => (
-              <div key={doc.type} className="rounded-md border border-zinc-200 p-3">
+              <div key={doc.type} className="rounded-lg border border-black/8 bg-[#fbfbfd] p-3">
                 <div className="flex items-center justify-between gap-2">
-                  <p className="text-sm font-medium">{doc.type.replaceAll("_", " ")}</p>
+                  <p className="text-sm font-medium">{documentLabels[doc.type]}</p>
                   {doc.present && doc.verified ? (
                     <CheckCircle2 className="h-4 w-4 text-emerald-600" />
                   ) : doc.present ? (
@@ -1226,7 +1484,7 @@ function DispatchDetails({
                   )}
                 </div>
                 <p className="mt-1 text-xs text-zinc-500">
-                  {doc.present ? (doc.verified ? "Verified" : "Present, pending check") : "Missing"}
+                  {doc.present ? (doc.verified ? "Checked" : "Present, not checked") : "Missing"}
                 </p>
               </div>
             ))}
@@ -1234,20 +1492,20 @@ function DispatchDetails({
         </section>
       </div>
 
-      <section className="rounded-md border border-zinc-200 bg-white p-4 shadow-sm">
-        <h3 className="text-base font-semibold">Exceptions and Audit</h3>
+      <section className="rounded-xl border border-black/8 bg-white p-5 shadow-[0_12px_35px_rgba(29,29,31,0.06)]">
+        <h3 className="text-base font-semibold">Problems and activity</h3>
         <div className="mt-4 grid gap-4 xl:grid-cols-2">
           <div className="space-y-2">
             {dispatch.exceptions.length === 0 ? (
               <p className="rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
-                No active exceptions on this dispatch.
+                No open problems on this job.
               </p>
             ) : (
               dispatch.exceptions.map((item) => (
                 <div key={item.id} className="rounded-md border border-zinc-200 p-3">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className={controlClasses(item.resolvedAt ? "WARNING" : item.controlStatus)}>
-                      {item.resolvedAt ? "RESOLVED" : item.controlStatus}
+                      {item.resolvedAt ? "Fixed" : controlLabels[item.controlStatus]}
                     </span>
                     <p className="text-sm font-semibold">{item.code}</p>
                   </div>
@@ -1259,7 +1517,7 @@ function DispatchDetails({
           <div className="space-y-2">
             {dispatch.audit.slice().reverse().map((entry) => (
               <div key={entry.id} className="rounded-md border border-zinc-200 p-3">
-                <p className="text-sm font-semibold">{entry.action.replaceAll("_", " ")}</p>
+                <p className="text-sm font-semibold">{activityLabel(entry.action)}</p>
                 <p className="mt-1 text-xs text-zinc-500">
                   {formatDateTime(entry.at)} by {entry.actor} ({roleLabels[entry.role]})
                 </p>
@@ -1267,6 +1525,238 @@ function DispatchDetails({
               </div>
             ))}
           </div>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function ActionDialog({
+  action,
+  dispatch,
+  isBusy,
+  onClose,
+  onSubmit,
+}: {
+  action: WorkflowAction;
+  dispatch: DispatchRequest;
+  isBusy: boolean;
+  onClose: () => void;
+  onSubmit: (input: WorkflowActionInput) => void;
+}) {
+  const defaultArrival = new Date(
+    dispatch.vehicle?.expectedArrival ?? `${dispatch.requestedDispatchDate}T09:00:00+05:45`,
+  );
+  const [vehicle, setVehicle] = useState({
+    vehicleNo: dispatch.vehicle?.vehicleNo ?? "Bagmati 03-001 Kha 7821",
+    transporter: dispatch.vehicle?.transporter ?? "Koshi Freight Service",
+    driverName: dispatch.vehicle?.driverName ?? "Nabin Shrestha",
+    driverPhone: dispatch.vehicle?.driverPhone ?? "9801234567",
+    expectedArrival: new Date(defaultArrival.getTime() - defaultArrival.getTimezoneOffset() * 60_000)
+      .toISOString()
+      .slice(0, 16),
+  });
+  const [actualWeightKg, setActualWeightKg] = useState(
+    String(
+      dispatch.actualWeightKg ??
+        (dispatch.expectedWeightKg ? Math.round(dispatch.expectedWeightKg * 1.006) : 0),
+    ),
+  );
+  const [documents, setDocuments] = useState<DispatchDocument[]>(
+    dispatch.documents.map((document) => ({ ...document })),
+  );
+  const [note, setNote] = useState("");
+  const [error, setError] = useState("");
+
+  const descriptions: Partial<Record<WorkflowAction, string>> = {
+    ASSIGN_VEHICLE: "Enter the truck and driver details for this job.",
+    VERIFY_WEIGHT: "Enter the final loaded weight from the scale.",
+    VERIFY_DOCUMENTS: "Tick every paper that is present.",
+    REJECT: "Write a short reason so the dispatch team can correct it.",
+    RESOLVE_EXCEPTION: "Record what was corrected before clearing the problem.",
+    CANCEL: "Write why this job is being cancelled.",
+  };
+
+  function submit() {
+    if (action === "ASSIGN_VEHICLE") {
+      if (
+        !vehicle.vehicleNo.trim() ||
+        !vehicle.transporter.trim() ||
+        !vehicle.driverName.trim() ||
+        !vehicle.driverPhone.trim() ||
+        !vehicle.expectedArrival
+      ) {
+        setError("Complete all truck and driver fields.");
+        return;
+      }
+      onSubmit({
+        vehicle: {
+          ...vehicle,
+          expectedArrival: new Date(vehicle.expectedArrival).toISOString(),
+        },
+      });
+      return;
+    }
+
+    if (action === "VERIFY_WEIGHT") {
+      const weight = Number(actualWeightKg);
+      if (!Number.isFinite(weight) || weight <= 0) {
+        setError("Enter a valid weight above zero.");
+        return;
+      }
+      onSubmit({ actualWeightKg: weight });
+      return;
+    }
+
+    if (action === "VERIFY_DOCUMENTS") {
+      onSubmit({ documents });
+      return;
+    }
+
+    if (!note.trim()) {
+      setError("Add a short note before you continue.");
+      return;
+    }
+    onSubmit({ note: note.trim() });
+  }
+
+  const fieldClass =
+    "h-11 w-full rounded-lg border border-black/15 bg-white px-3 text-sm text-[#1d1d1f] outline-none transition focus:border-[#0071e3] focus:ring-2 focus:ring-[#0071e3]/15";
+  const isDanger = action === "REJECT" || action === "CANCEL";
+
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-black/35 p-4 backdrop-blur-sm">
+      <section
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="action-dialog-title"
+        className="max-h-[92dvh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-white/40 bg-[#fbfbfd] shadow-[0_28px_90px_rgba(0,0,0,0.28)]"
+      >
+        <div className="flex items-start justify-between gap-4 border-b border-black/8 px-5 py-5 sm:px-6">
+          <div>
+            <p className="text-sm font-medium text-[#0066cc]">{dispatch.requestNo}</p>
+            <h2 id="action-dialog-title" className="mt-1 text-xl font-semibold">
+              {actionLabels[action]}
+            </h2>
+            <p className="mt-1 text-sm text-[#6e6e73]">{descriptions[action]}</p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={isBusy}
+            aria-label="Close"
+            className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-black/5 text-[#515154] transition hover:bg-black/10 active:scale-[0.96]"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="px-5 py-5 sm:px-6">
+          {action === "ASSIGN_VEHICLE" && (
+            <div className="grid gap-4 sm:grid-cols-2">
+              <label className="space-y-2">
+                <span className="text-sm font-medium">Truck number</span>
+                <input className={fieldClass} value={vehicle.vehicleNo} onChange={(event) => setVehicle({ ...vehicle, vehicleNo: event.target.value })} />
+              </label>
+              <label className="space-y-2">
+                <span className="text-sm font-medium">Transport company</span>
+                <input className={fieldClass} value={vehicle.transporter} onChange={(event) => setVehicle({ ...vehicle, transporter: event.target.value })} />
+              </label>
+              <label className="space-y-2">
+                <span className="text-sm font-medium">Driver name</span>
+                <input className={fieldClass} value={vehicle.driverName} onChange={(event) => setVehicle({ ...vehicle, driverName: event.target.value })} />
+              </label>
+              <label className="space-y-2">
+                <span className="text-sm font-medium">Driver phone</span>
+                <input className={fieldClass} value={vehicle.driverPhone} onChange={(event) => setVehicle({ ...vehicle, driverPhone: event.target.value })} />
+              </label>
+              <label className="space-y-2 sm:col-span-2">
+                <span className="text-sm font-medium">Expected arrival</span>
+                <input type="datetime-local" className={fieldClass} value={vehicle.expectedArrival} onChange={(event) => setVehicle({ ...vehicle, expectedArrival: event.target.value })} />
+              </label>
+            </div>
+          )}
+
+          {action === "VERIFY_WEIGHT" && (
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="rounded-xl bg-[#f0f0f2] p-4">
+                <p className="text-sm text-[#6e6e73]">Expected weight</p>
+                <p className="mt-1 text-2xl font-semibold">{formatNumber(dispatch.expectedWeightKg ?? 0)} KG</p>
+                <p className="mt-1 text-xs text-[#6e6e73]">Allowed change: {dispatch.weightTolerancePercent}%</p>
+              </div>
+              <label className="space-y-2">
+                <span className="text-sm font-medium">Actual weight (KG)</span>
+                <input type="number" min={1} step="0.01" className={fieldClass} value={actualWeightKg} onChange={(event) => setActualWeightKg(event.target.value)} />
+                <span className="block text-xs text-[#6e6e73]">Use the weight shown on the factory scale.</span>
+              </label>
+            </div>
+          )}
+
+          {action === "VERIFY_DOCUMENTS" && (
+            <div className="grid gap-3 sm:grid-cols-2">
+              {documents.map((document) => (
+                <label key={document.type} className="flex cursor-pointer items-center gap-3 rounded-xl border border-black/10 bg-white p-4 transition hover:border-[#0071e3]/40">
+                  <input
+                    type="checkbox"
+                    checked={document.present}
+                    onChange={(event) =>
+                      setDocuments((items) =>
+                        items.map((item) =>
+                          item.type === document.type
+                            ? { ...item, present: event.target.checked, verified: false }
+                            : item,
+                        ),
+                      )
+                    }
+                    className="h-5 w-5 rounded border-black/20 accent-[#0071e3]"
+                  />
+                  <span className="font-medium">{documentLabels[document.type]}</span>
+                </label>
+              ))}
+            </div>
+          )}
+
+          {["REJECT", "RESOLVE_EXCEPTION", "CANCEL"].includes(action) && (
+            <label className="space-y-2">
+              <span className="text-sm font-medium">Note</span>
+              <textarea
+                rows={4}
+                value={note}
+                onChange={(event) => setNote(event.target.value)}
+                className="w-full resize-none rounded-lg border border-black/15 bg-white px-3 py-3 text-sm outline-none transition focus:border-[#0071e3] focus:ring-2 focus:ring-[#0071e3]/15"
+                placeholder="Write a clear, short reason"
+              />
+            </label>
+          )}
+
+          {error && (
+            <p className="mt-4 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-medium text-rose-700">
+              {error}
+            </p>
+          )}
+        </div>
+
+        <div className="flex justify-end gap-2 border-t border-black/8 bg-white/70 px-5 py-4 sm:px-6">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={isBusy}
+            className="h-10 rounded-lg px-4 text-sm font-semibold text-[#515154] transition hover:bg-black/5 active:scale-[0.98]"
+          >
+            Back
+          </button>
+          <button
+            type="button"
+            onClick={submit}
+            disabled={isBusy}
+            className={clsx(
+              "inline-flex h-10 items-center gap-2 rounded-lg px-4 text-sm font-semibold text-white shadow-sm transition active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-55",
+              isDanger ? "bg-rose-700 hover:bg-rose-800" : "bg-[#0071e3] hover:bg-[#0068d1]",
+            )}
+          >
+            {isBusy ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+            {isBusy ? "Saving" : actionLabels[action]}
+          </button>
         </div>
       </section>
     </div>
@@ -1304,28 +1794,28 @@ function InventoryView({
         ))}
       </section>
 
-      <section className="rounded-md border border-zinc-200 bg-white shadow-sm">
-        <div className="border-b border-zinc-200 px-4 py-3">
-          <h2 className="text-base font-semibold">Inventory Batches</h2>
-          <p className="text-sm text-zinc-600">Only RELEASED inventory can be reserved or dispatched.</p>
+      <section className="overflow-hidden rounded-xl border border-black/8 bg-white shadow-[0_12px_35px_rgba(29,29,31,0.06)]">
+        <div className="border-b border-black/8 px-5 py-4">
+          <h2 className="text-base font-semibold">Stock lots</h2>
+          <p className="text-sm text-[#6e6e73]">Only stock marked Ready can be used.</p>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full min-w-[980px] text-left text-sm">
-            <thead className="bg-zinc-50 text-xs uppercase tracking-wide text-zinc-500">
+            <thead className="bg-[#fbfbfd] text-xs font-medium text-[#6e6e73]">
               <tr>
-                <th className="px-4 py-3">Batch</th>
-                <th className="px-4 py-3">Product</th>
-                <th className="px-4 py-3">Attributes</th>
+                <th className="px-4 py-3">Lot</th>
+                <th className="px-4 py-3">Paper</th>
+                <th className="px-4 py-3">Details</th>
                 <th className="px-4 py-3">On Hand</th>
                 <th className="px-4 py-3">Reserved</th>
                 <th className="px-4 py-3">Available</th>
-                <th className="px-4 py-3">Quality</th>
+                <th className="px-4 py-3">Quality check</th>
                 <th className="px-4 py-3">Location</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-zinc-100">
+            <tbody>
               {inventory.map((batch) => (
-                <tr key={batch.id} className="hover:bg-zinc-50">
+                <tr key={batch.id} className="border-t border-black/6 transition hover:bg-[#fbfbfd]">
                   <td className="px-4 py-3">
                     <p className="font-semibold">{batch.batchNo}</p>
                     <p className="text-xs text-zinc-500">{formatDate(batch.producedOn)}</p>
@@ -1348,7 +1838,7 @@ function InventoryView({
                   </td>
                   <td className="px-4 py-3">
                     <span className={qualityClasses(batch.qualityStatus)}>
-                      {batch.qualityStatus.replaceAll("_", " ")}
+                      {qualityLabels[batch.qualityStatus]}
                     </span>
                   </td>
                   <td className="px-4 py-3">{batch.location}</td>
@@ -1378,17 +1868,17 @@ function ExceptionsView({
   );
 
   return (
-    <section className="rounded-md border border-zinc-200 bg-white shadow-sm">
-      <div className="border-b border-zinc-200 px-4 py-3">
-        <h2 className="text-base font-semibold">Exceptions</h2>
-        <p className="text-sm text-zinc-600">Operational blocks generated by validation, inventory, quality, weight, and document controls.</p>
+    <section className="overflow-hidden rounded-xl border border-black/8 bg-white shadow-[0_12px_35px_rgba(29,29,31,0.06)]">
+      <div className="border-b border-black/8 px-5 py-4">
+        <h2 className="text-base font-semibold">Dispatch problems</h2>
+        <p className="text-sm text-[#6e6e73]">Blocked jobs cannot leave the factory until the problem is fixed.</p>
       </div>
-      <div className="divide-y divide-zinc-100">
+      <div>
         {rows.map(({ dispatch, exception: item }) => {
           const canResolve =
             !item.resolvedAt && getAvailableActions(dispatch, currentUser.role).includes("RESOLVE_EXCEPTION");
           return (
-            <div key={item.id} className="grid gap-3 px-4 py-4 xl:grid-cols-[220px_minmax(0,1fr)_220px]">
+            <div key={item.id} className="grid gap-3 border-t border-black/6 px-5 py-4 xl:grid-cols-[220px_minmax(0,1fr)_220px]">
               <div>
                 <button
                   type="button"
@@ -1402,7 +1892,7 @@ function ExceptionsView({
               <div>
                 <div className="flex flex-wrap items-center gap-2">
                   <span className={controlClasses(item.resolvedAt ? "WARNING" : item.controlStatus)}>
-                    {item.resolvedAt ? "RESOLVED" : item.controlStatus}
+                    {item.resolvedAt ? "Fixed" : controlLabels[item.controlStatus]}
                   </span>
                   <p className="text-sm font-semibold">{item.code}</p>
                 </div>
@@ -1413,16 +1903,16 @@ function ExceptionsView({
                   <button
                     type="button"
                     onClick={() => onAction(dispatch.id, "RESOLVE_EXCEPTION")}
-                    className="inline-flex h-9 items-center gap-2 rounded-md bg-amber-500 px-3 text-sm font-semibold text-zinc-950 hover:bg-amber-400"
+                    className="inline-flex h-9 items-center gap-2 rounded-lg bg-amber-600 px-3 text-sm font-semibold text-white transition hover:bg-amber-700 active:scale-[0.97]"
                   >
                     <ShieldCheck className="h-4 w-4" />
-                    Resolve
+                    Fix problem
                   </button>
                 )}
                 <button
                   type="button"
                   onClick={() => onSelect(dispatch.id)}
-                  className="inline-flex h-9 items-center gap-2 rounded-md border border-zinc-300 px-3 text-sm font-medium hover:bg-zinc-50"
+                  className="inline-flex h-9 items-center gap-2 rounded-lg px-3 text-sm font-semibold text-[#0066cc] transition hover:bg-[#eef6fd] active:scale-[0.97]"
                 >
                   Open
                   <ArrowRight className="h-4 w-4" />
@@ -1432,7 +1922,7 @@ function ExceptionsView({
           );
         })}
         {rows.length === 0 && (
-          <p className="px-4 py-8 text-center text-sm text-zinc-500">No exceptions recorded.</p>
+          <p className="px-4 py-10 text-center text-sm text-[#6e6e73]">No problems recorded.</p>
         )}
       </div>
     </section>
@@ -1469,27 +1959,27 @@ function Reports({
     <div className="space-y-5">
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         <MetricTile
-          label="Completion Rate"
+          label="Jobs completed"
           value={`${Math.round((metrics.dispatched / Math.max(metrics.total, 1)) * 100)}%`}
           detail={`${metrics.dispatched} of ${metrics.total} dispatches completed`}
           icon={Gauge}
           tone="green"
         />
         <MetricTile
-          label="Control Blocks"
+          label="Blocked jobs"
           value={String(metrics.blocked)}
-          detail="Blocks stop gate exit until resolved"
+          detail="Cannot leave until fixed"
           icon={LockKeyhole}
           tone={metrics.blocked ? "red" : "green"}
         />
         <MetricTile
-          label="Reserved Reel Qty"
+          label="Reserved reels"
           value={`${formatNumber(metrics.reservedKg)} KG`}
           detail="Held after approval, before exit"
           icon={Database}
         />
         <MetricTile
-          label="Reserved Sheet Qty"
+          label="Reserved sheets"
           value={`${formatNumber(metrics.reservedReam)} REAM`}
           detail="No KG/REAM conversion applied"
           icon={Boxes}
@@ -1498,8 +1988,8 @@ function Reports({
       </div>
 
       <div className="grid gap-5 xl:grid-cols-2">
-        <section className="rounded-md border border-zinc-200 bg-white p-4 shadow-sm">
-          <h2 className="text-base font-semibold">Status Distribution</h2>
+        <section className="rounded-xl border border-black/8 bg-white p-5 shadow-[0_12px_35px_rgba(29,29,31,0.06)]">
+          <h2 className="text-base font-semibold">Jobs by stage</h2>
           <div className="mt-4 space-y-3">
             {byStatus.map((row) => (
               <div key={row.status}>
@@ -1510,7 +2000,7 @@ function Reports({
                 <div className="mt-1 h-2 rounded-full bg-zinc-100">
                   <div
                     className="h-2 rounded-full bg-emerald-600"
-                    style={{ width: `${(row.count / dispatches.length) * 100}%` }}
+                    style={{ width: `${(row.count / Math.max(dispatches.length, 1)) * 100}%` }}
                   />
                 </div>
               </div>
@@ -1518,25 +2008,25 @@ function Reports({
           </div>
         </section>
 
-        <section className="rounded-md border border-zinc-200 bg-white p-4 shadow-sm">
-          <h2 className="text-base font-semibold">Demo Scenario Coverage</h2>
+        <section className="rounded-xl border border-black/8 bg-white p-5 shadow-[0_12px_35px_rgba(29,29,31,0.06)]">
+          <h2 className="text-base font-semibold">Rules in use</h2>
           <div className="mt-4 space-y-3 text-sm">
-            <ScenarioRow label="Successful dispatch" status="Covered" />
-            <ScenarioRow label="Insufficient inventory" status="Covered" />
-            <ScenarioRow label="Quality blocked inventory" status="Covered" />
-            <ScenarioRow label="Weight variance exceeding tolerance" status="Covered" />
-            <ScenarioRow label="Missing documentation" status="Covered" />
+            <ScenarioRow label="Normal dispatch" status="Active" />
+            <ScenarioRow label="Not enough ready stock" status="Active" />
+            <ScenarioRow label="Quality-blocked stock" status="Active" />
+            <ScenarioRow label="Weight outside limit" status="Active" />
+            <ScenarioRow label="Missing papers" status="Active" />
           </div>
         </section>
       </div>
 
-      <section className="rounded-md border border-zinc-200 bg-white p-4 shadow-sm">
-        <h2 className="text-base font-semibold">Quality Hold and Inspection Stock</h2>
+      <section className="rounded-xl border border-black/8 bg-white p-5 shadow-[0_12px_35px_rgba(29,29,31,0.06)]">
+        <h2 className="text-base font-semibold">Stock not ready</h2>
         <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           {blockedStock.map((batch) => (
             <div key={batch.id} className="rounded-md border border-zinc-200 p-3">
               <span className={qualityClasses(batch.qualityStatus)}>
-                {batch.qualityStatus.replaceAll("_", " ")}
+                {qualityLabels[batch.qualityStatus]}
               </span>
               <p className="mt-3 text-sm font-semibold">{batch.batchNo}</p>
               <p className="text-sm text-zinc-600">{batch.productName}</p>
@@ -1579,14 +2069,14 @@ function AuditTimeline({
   }>;
 }) {
   return (
-    <section className="rounded-md border border-zinc-200 bg-white shadow-sm">
-      <div className="border-b border-zinc-200 px-4 py-3">
-        <h2 className="text-base font-semibold">Audit Timeline</h2>
-        <p className="text-sm text-zinc-600">Immutable-style event history for workflow transitions and exceptions.</p>
+    <section className="overflow-hidden rounded-xl border border-black/8 bg-white shadow-[0_12px_35px_rgba(29,29,31,0.06)]">
+      <div className="border-b border-black/8 px-5 py-4">
+        <h2 className="text-base font-semibold">Factory activity</h2>
+        <p className="text-sm text-[#6e6e73]">Who changed each job and when.</p>
       </div>
-      <div className="divide-y divide-zinc-100">
+      <div>
         {entries.map((entry) => (
-          <div key={entry.id} className="grid gap-3 px-4 py-4 xl:grid-cols-[190px_220px_minmax(0,1fr)]">
+          <div key={entry.id} className="grid gap-3 border-t border-black/6 px-5 py-4 xl:grid-cols-[190px_220px_minmax(0,1fr)]">
             <div className="flex items-start gap-3">
               <div className="mt-1 grid h-8 w-8 place-items-center rounded-md bg-zinc-100 text-zinc-700">
                 <CalendarDays className="h-4 w-4" />
@@ -1601,9 +2091,9 @@ function AuditTimeline({
               <p className="text-sm text-zinc-500">{entry.customer}</p>
             </div>
             <div>
-              <p className="text-sm font-semibold">{entry.action.replaceAll("_", " ")}</p>
+              <p className="text-sm font-semibold">{activityLabel(entry.action)}</p>
               <p className="mt-1 text-sm text-zinc-700">{entry.note}</p>
-              <p className="mt-1 text-xs text-zinc-500">Actor: {entry.actor}</p>
+              <p className="mt-1 text-xs text-zinc-500">By {entry.actor}</p>
             </div>
           </div>
         ))}

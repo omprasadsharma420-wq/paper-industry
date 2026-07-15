@@ -1,6 +1,7 @@
 import type {
   AppState,
   AppUser,
+  DispatchDocument,
   AuditEntry,
   ControlStatus,
   DispatchException,
@@ -8,6 +9,7 @@ import type {
   DispatchRequest,
   InventoryBatch,
   UserRole,
+  VehicleAssignment,
   WorkflowResult,
   WorkflowStatus,
 } from "./types";
@@ -38,28 +40,35 @@ export interface CreateDispatchInput {
   requestedDispatchDate: string;
 }
 
+export interface WorkflowActionInput {
+  vehicle?: VehicleAssignment;
+  actualWeightKg?: number;
+  documents?: DispatchDocument[];
+  note?: string;
+}
+
 export const statusLabels: Record<WorkflowStatus, string> = {
   DRAFT: "Draft",
-  AWAITING_APPROVAL: "Awaiting Approval",
+  AWAITING_APPROVAL: "Needs Approval",
   REJECTED: "Rejected",
   APPROVED: "Approved",
-  VEHICLE_ASSIGNED: "Vehicle Assigned",
-  VEHICLE_ARRIVED: "Vehicle Arrived",
+  VEHICLE_ASSIGNED: "Truck Booked",
+  VEHICLE_ARRIVED: "Truck at Gate",
   LOADING: "Loading",
-  AWAITING_WEIGHT_CHECK: "Awaiting Weight Check",
-  AWAITING_DOCUMENT_CHECK: "Awaiting Document Check",
-  AWAITING_GATE_CLEARANCE: "Awaiting Gate Clearance",
-  CLEARED_FOR_EXIT: "Cleared for Exit",
-  DISPATCHED: "Dispatched",
+  AWAITING_WEIGHT_CHECK: "Check Weight",
+  AWAITING_DOCUMENT_CHECK: "Check Papers",
+  AWAITING_GATE_CLEARANCE: "Gate Check",
+  CLEARED_FOR_EXIT: "Ready to Leave",
+  DISPATCHED: "Truck Left",
   CANCELLED: "Cancelled",
 };
 
 export const roleLabels: Record<UserRole, string> = {
-  DISPATCH_CLERK: "Dispatch Clerk",
-  WAREHOUSE_QUALITY: "Warehouse / Quality",
+  DISPATCH_CLERK: "Dispatch Worker",
+  WAREHOUSE_QUALITY: "Store and Quality",
   DISPATCH_SUPERVISOR: "Dispatch Supervisor",
-  GATE_SECURITY: "Gate Security",
-  MANAGER_ADMIN: "Manager / Admin",
+  GATE_SECURITY: "Gate Worker",
+  MANAGER_ADMIN: "Factory Manager",
 };
 
 export const workflowOrder: WorkflowStatus[] = [
@@ -77,18 +86,18 @@ export const workflowOrder: WorkflowStatus[] = [
 ];
 
 export const actionLabels: Record<WorkflowAction, string> = {
-  SUBMIT_FOR_APPROVAL: "Submit",
-  APPROVE_AND_RESERVE: "Approve & Reserve",
+  SUBMIT_FOR_APPROVAL: "Send for Approval",
+  APPROVE_AND_RESERVE: "Approve",
   REJECT: "Reject",
-  ASSIGN_VEHICLE: "Assign Vehicle",
-  MARK_VEHICLE_ARRIVED: "Mark Arrived",
+  ASSIGN_VEHICLE: "Book Truck",
+  MARK_VEHICLE_ARRIVED: "Truck Arrived",
   START_LOADING: "Start Loading",
-  COMPLETE_LOADING: "Complete Loading",
-  VERIFY_WEIGHT: "Verify Weight",
-  VERIFY_DOCUMENTS: "Verify Docs",
-  CLEAR_GATE: "Clear Gate",
-  CONFIRM_EXIT: "Confirm Exit",
-  RESOLVE_EXCEPTION: "Resolve Exception",
+  COMPLETE_LOADING: "Finish Loading",
+  VERIFY_WEIGHT: "Check Weight",
+  VERIFY_DOCUMENTS: "Check Papers",
+  CLEAR_GATE: "Allow Exit",
+  CONFIRM_EXIT: "Truck Left",
+  RESOLVE_EXCEPTION: "Fix Problem",
   CANCEL: "Cancel",
 };
 
@@ -96,7 +105,7 @@ const actionRoles: Record<WorkflowAction, UserRole[]> = {
   SUBMIT_FOR_APPROVAL: ["DISPATCH_CLERK", "MANAGER_ADMIN"],
   APPROVE_AND_RESERVE: ["DISPATCH_SUPERVISOR", "MANAGER_ADMIN"],
   REJECT: ["DISPATCH_SUPERVISOR", "MANAGER_ADMIN"],
-  ASSIGN_VEHICLE: ["DISPATCH_CLERK", "DISPATCH_SUPERVISOR", "MANAGER_ADMIN"],
+  ASSIGN_VEHICLE: ["DISPATCH_CLERK", "MANAGER_ADMIN"],
   MARK_VEHICLE_ARRIVED: ["GATE_SECURITY", "MANAGER_ADMIN"],
   START_LOADING: ["WAREHOUSE_QUALITY", "MANAGER_ADMIN"],
   COMPLETE_LOADING: ["WAREHOUSE_QUALITY", "MANAGER_ADMIN"],
@@ -383,6 +392,7 @@ export function performWorkflowAction(
   dispatchId: string,
   actor: AppUser,
   action: WorkflowAction,
+  input: WorkflowActionInput = {},
 ): WorkflowResult {
   const target = state.dispatches.find((dispatch) => dispatch.id === dispatchId);
   if (!target) return { state, dispatchId, message: "Dispatch was not found." };
@@ -439,12 +449,12 @@ export function performWorkflowAction(
       nextDispatch.exceptions.push(
         exception(nextDispatch, "MANUAL_REJECTION", "Rejected by dispatch supervisor."),
       );
-      note = "Rejected by approver.";
+      note = input.note?.trim() || "Rejected by approver.";
     }
 
     if (action === "ASSIGN_VEHICLE") {
       nextStatus = "VEHICLE_ASSIGNED";
-      nextDispatch.vehicle = {
+      nextDispatch.vehicle = input.vehicle ?? {
         vehicleNo: "Bagmati 03-001 Kha 7821",
         transporter: "Koshi Freight Service",
         driverName: "Nabin Shrestha",
@@ -477,7 +487,9 @@ export function performWorkflowAction(
     if (action === "VERIFY_WEIGHT") {
       const expected = nextDispatch.expectedWeightKg ?? 0;
       const actual =
-        nextDispatch.actualWeightKg ?? (expected > 0 ? Math.round(expected * 1.006) : 0);
+        input.actualWeightKg ??
+        nextDispatch.actualWeightKg ??
+        (expected > 0 ? Math.round(expected * 1.006) : 0);
       nextDispatch.actualWeightKg = actual;
 
       if (expected > 0) {
@@ -504,6 +516,9 @@ export function performWorkflowAction(
     }
 
     if (action === "VERIFY_DOCUMENTS") {
+      if (input.documents) {
+        nextDispatch.documents = input.documents.map((document) => ({ ...document }));
+      }
       const missing = nextDispatch.documents.filter((doc) => !doc.present);
       if (missing.length > 0) {
         nextDispatch.exceptions.push(
@@ -559,7 +574,7 @@ export function performWorkflowAction(
         nextStatus = "AWAITING_APPROVAL";
         note = "Exception resolved and request returned to approval queue.";
       } else {
-        note = "Exception marked resolved.";
+        note = input.note?.trim() || "Problem marked as fixed.";
       }
     }
 
@@ -568,7 +583,7 @@ export function performWorkflowAction(
       nextDispatch.exceptions.push(
         exception(nextDispatch, "CANCELLED_BY_USER", "Dispatch cancelled before factory exit."),
       );
-      note = "Dispatch cancelled before exit.";
+      note = input.note?.trim() || "Dispatch cancelled before exit.";
     }
 
     if (nextStatus) {

@@ -7,7 +7,8 @@
     "dev": "next dev",
     "build": "node scripts/build-sites.mjs",
     "start": "vinext start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "verify:demo": "node scripts/verify-demo.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.110.4",

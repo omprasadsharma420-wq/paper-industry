@@ -40,7 +40,7 @@ const ACTIONS = {
   CHECK_INVENTORY: { roles: ["DISPATCH_CLERK", "WAREHOUSE_QUALITY", "DISPATCH_SUPERVISOR", "MANAGER_ADMIN"], from: [], to: null },
   SUBMIT_FOR_APPROVAL: { roles: ["DISPATCH_CLERK", "MANAGER_ADMIN"], from: ["DRAFT"], to: "AWAITING_APPROVAL" },
   APPROVE_AND_RESERVE: { roles: ["DISPATCH_SUPERVISOR", "MANAGER_ADMIN"], from: ["AWAITING_APPROVAL"], to: "APPROVED" },
-  ASSIGN_VEHICLE: { roles: ["DISPATCH_CLERK", "DISPATCH_SUPERVISOR", "MANAGER_ADMIN"], from: ["APPROVED"], to: "VEHICLE_ASSIGNED" },
+  ASSIGN_VEHICLE: { roles: ["DISPATCH_CLERK", "MANAGER_ADMIN"], from: ["APPROVED"], to: "VEHICLE_ASSIGNED" },
   MARK_VEHICLE_ARRIVED: { roles: ["GATE_SECURITY", "MANAGER_ADMIN"], from: ["VEHICLE_ASSIGNED"], to: "VEHICLE_ARRIVED" },
   START_LOADING: { roles: ["WAREHOUSE_QUALITY", "MANAGER_ADMIN"], from: ["VEHICLE_ARRIVED"], to: "LOADING" },
   COMPLETE_LOADING: { roles: ["WAREHOUSE_QUALITY", "MANAGER_ADMIN"], from: ["LOADING"], to: "AWAITING_WEIGHT_CHECK" },
@@ -185,7 +185,11 @@ function sortBatches(a, b) {
 }
 
 function activeExceptionCount(dispatch) {
-  return asArray(dispatch.exceptions).filter((item) => !item.resolvedAt && !item.resolved_at).length;
+  return asArray(dispatch.exceptions).filter((item) => {
+    const unresolved = !item.resolvedAt && !item.resolved_at;
+    const controlStatus = item.controlStatus || item.control_status;
+    return unresolved && controlStatus === "BLOCKED";
+  }).length;
 }
 
 function documentType(doc) {
