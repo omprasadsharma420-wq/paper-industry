@@ -1,7 +1,10 @@
 import { createClient } from "@supabase/supabase-js";
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+const supabaseUrl =
+  process.env.NEXT_PUBLIC_SUPABASE_URL ?? "https://etykyasaicfhrbbtbdfv.supabase.co";
+const supabaseKey =
+  process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ??
+  "sb_publishable_9CUzPDO-Ep08eZUihvGuYA_0smOgJA5";
 
 export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseKey);
 

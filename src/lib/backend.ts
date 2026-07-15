@@ -64,10 +64,9 @@ async function callDispatchControl(
   action: WorkflowAction,
   input: WorkflowActionInput,
 ): Promise<N8nControlResult> {
-  const baseUrl = process.env.NEXT_PUBLIC_N8N_WEBHOOK_BASE_URL;
-  if (!baseUrl) {
-    throw new Error("NEXT_PUBLIC_N8N_WEBHOOK_BASE_URL is not configured.");
-  }
+  const baseUrl =
+    process.env.NEXT_PUBLIC_N8N_WEBHOOK_BASE_URL ??
+    "https://om420.app.n8n.cloud/webhook";
 
   const response = await fetch(`${baseUrl.replace(/\/$/, "")}/paper-dispatch-control`, {
     method: "POST",
