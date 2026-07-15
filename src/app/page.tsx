@@ -32,6 +32,13 @@ import {
   XCircle,
 } from "lucide-react";
 import { clsx } from "clsx";
+import {
+  createBackendDispatch,
+  isBackendConfigured,
+  loadBackendState,
+  performBackendWorkflowAction,
+  resetBackendState,
+} from "@/lib/backend";
 import { initialState } from "@/lib/demo-data";
 import type {
   AppState,
@@ -174,26 +181,61 @@ export default function Home() {
     initialState.dispatches[0]?.id ?? "",
   );
   const [searchTerm, setSearchTerm] = useState("");
-  const [toast, setToast] = useState("Demo system ready.");
+  const [toast, setToast] = useState(
+    isBackendConfigured ? "Connecting to Supabase backend..." : "Demo system ready.",
+  );
   const [hasLoaded, setHasLoaded] = useState(false);
+  const [backendMode, setBackendMode] = useState<"loading" | "supabase" | "local">(
+    isBackendConfigured ? "loading" : "local",
+  );
+  const [isBusy, setIsBusy] = useState(false);
 
   useEffect(() => {
-    const timer = window.setTimeout(() => {
-      const stored = loadStoredState();
-      if (stored) {
-        setState(stored);
-        setSelectedDispatchId(stored.dispatches[0]?.id ?? "");
-      }
-      setHasLoaded(true);
-    }, 0);
+    let cancelled = false;
 
-    return () => window.clearTimeout(timer);
+    async function loadState() {
+      const stored = loadStoredState();
+
+      if (isBackendConfigured) {
+        try {
+          const backendState = await loadBackendState();
+          if (!cancelled && backendState) {
+            setState(backendState);
+            setSelectedDispatchId(backendState.dispatches[0]?.id ?? "");
+            setBackendMode("supabase");
+            setToast("Connected to Supabase backend and n8n controls.");
+            setHasLoaded(true);
+            return;
+          }
+        } catch (error) {
+          console.error(error);
+          if (!cancelled) {
+            setToast("Supabase connection failed. Running local fallback demo.");
+          }
+        }
+      }
+
+      if (!cancelled) {
+        if (stored) {
+          setState(stored);
+          setSelectedDispatchId(stored.dispatches[0]?.id ?? "");
+        }
+        setBackendMode("local");
+        setHasLoaded(true);
+      }
+    }
+
+    void loadState();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
-    if (!hasLoaded) return;
+    if (!hasLoaded || backendMode !== "local") return;
     window.localStorage.setItem("paper-dispatch-demo-state", JSON.stringify(state));
-  }, [hasLoaded, state]);
+  }, [backendMode, hasLoaded, state]);
 
   const selectedDispatch = useMemo(
     () => state.dispatches.find((dispatch) => dispatch.id === selectedDispatchId) ?? state.dispatches[0],
@@ -263,30 +305,80 @@ export default function Home() {
     window.scrollTo({ top: 0, left: 0 });
   }
 
-  function resetDemo() {
-    setState(initialState);
-    setSelectedDispatchId(initialState.dispatches[0]?.id ?? "");
-    setToast("Demo data reset to the prepared scenarios.");
-    if (typeof window !== "undefined") {
-      window.localStorage.removeItem("paper-dispatch-demo-state");
+  async function resetDemo() {
+    if (isBusy) return;
+    setIsBusy(true);
+
+    try {
+      if (backendMode === "supabase") {
+        const result = await resetBackendState();
+        if (result) {
+          setState(result.state);
+          setSelectedDispatchId(result.dispatchId);
+          setToast(result.message);
+          return;
+        }
+      }
+
+      setState(initialState);
+      setSelectedDispatchId(initialState.dispatches[0]?.id ?? "");
+      setToast("Demo data reset to the prepared scenarios.");
+      if (typeof window !== "undefined") {
+        window.localStorage.removeItem("paper-dispatch-demo-state");
+      }
+    } catch (error) {
+      console.error(error);
+      setToast(error instanceof Error ? error.message : "Reset failed.");
+    } finally {
+      setIsBusy(false);
     }
   }
 
-  function runAction(dispatchId: string, action: WorkflowAction) {
+  async function runAction(dispatchId: string, action: WorkflowAction) {
     if (!currentUser) return;
-    const result = performWorkflowAction(state, dispatchId, currentUser, action);
-    setState(result.state);
-    setSelectedDispatchId(result.dispatchId);
-    setToast(result.message);
+    if (isBusy) return;
+    setIsBusy(true);
+
+    try {
+      const result =
+        backendMode === "supabase"
+          ? await performBackendWorkflowAction(state, dispatchId, currentUser, action)
+          : performWorkflowAction(state, dispatchId, currentUser, action);
+
+      if (!result) return;
+      setState(result.state);
+      setSelectedDispatchId(result.dispatchId);
+      setToast(result.message);
+    } catch (error) {
+      console.error(error);
+      setToast(error instanceof Error ? error.message : "Workflow action failed.");
+    } finally {
+      setIsBusy(false);
+    }
   }
 
-  function handleCreate(input: CreateDispatchInput) {
+  async function handleCreate(input: CreateDispatchInput) {
     if (!currentUser) return;
-    const result = createDispatch(state, currentUser, input);
-    setState(result.state);
-    setSelectedDispatchId(result.dispatchId);
-    setActiveView("details");
-    setToast(result.message);
+    if (isBusy) return;
+    setIsBusy(true);
+
+    try {
+      const result =
+        backendMode === "supabase"
+          ? await createBackendDispatch(currentUser, input)
+          : createDispatch(state, currentUser, input);
+
+      if (!result) return;
+      setState(result.state);
+      setSelectedDispatchId(result.dispatchId);
+      setActiveView("details");
+      setToast(result.message);
+    } catch (error) {
+      console.error(error);
+      setToast(error instanceof Error ? error.message : "Create dispatch failed.");
+    } finally {
+      setIsBusy(false);
+    }
   }
 
   if (!currentUser) {
@@ -362,11 +454,20 @@ export default function Home() {
                 <button
                   type="button"
                   onClick={resetDemo}
-                  className="inline-flex h-10 items-center gap-2 rounded-md border border-zinc-300 bg-white px-3 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
+                  disabled={isBusy}
+                  className="inline-flex h-10 items-center gap-2 rounded-md border border-zinc-300 bg-white px-3 text-sm font-medium text-zinc-700 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <RotateCcw className="h-4 w-4" />
                   Reset
                 </button>
+                <span className="inline-flex h-10 items-center gap-2 rounded-md border border-zinc-200 bg-zinc-50 px-3 text-sm font-medium text-zinc-700">
+                  <Database className="h-4 w-4" />
+                  {backendMode === "supabase"
+                    ? "Supabase live"
+                    : backendMode === "loading"
+                      ? "Connecting"
+                      : "Local fallback"}
+                </span>
                 <button
                   type="button"
                   onClick={() => setCurrentUser(null)}
