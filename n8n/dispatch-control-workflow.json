@@ -1,0 +1,67 @@
+{
+  "name": "Paper Industry Dispatch Controls",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "dispatch-control",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "dispatch-control-webhook",
+      "name": "Dispatch Control Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\nconst action = input.action || 'VALIDATE';\nconst dispatch = input.dispatch || {};\nconst inventory = input.inventory || [];\nconst tolerance = Number(dispatch.weightTolerancePercent || 1.5);\nconst exceptions = [];\n\nfunction releasedAvailable(productCode) {\n  return inventory\n    .filter((batch) => batch.productCode === productCode && batch.qualityStatus === 'RELEASED')\n    .reduce((sum, batch) => sum + Math.max(Number(batch.onHandQty || 0) - Number(batch.reservedQty || 0), 0), 0);\n}\n\nif (action === 'VALIDATE' || action === 'APPROVE_AND_RESERVE') {\n  for (const line of dispatch.lines || []) {\n    const available = releasedAvailable(line.productCode);\n    if (available < Number(line.requestedQty || 0)) {\n      exceptions.push({\n        code: 'INSUFFICIENT_RELEASED_STOCK',\n        message: `${line.productName || line.productCode} has ${available} released ${line.unit}, requested ${line.requestedQty}.`,\n        controlStatus: 'BLOCKED'\n      });\n    }\n  }\n}\n\nif (action === 'VERIFY_WEIGHT' && dispatch.expectedWeightKg) {\n  const expected = Number(dispatch.expectedWeightKg);\n  const actual = Number(dispatch.actualWeightKg || 0);\n  const variance = Math.abs(((actual - expected) / expected) * 100);\n  if (variance > tolerance) {\n    exceptions.push({\n      code: 'WEIGHT_VARIANCE_EXCEEDED',\n      message: `Actual weight variance is ${variance.toFixed(2)}%, above ${tolerance}%.`,\n      controlStatus: 'BLOCKED'\n    });\n  }\n}\n\nif (action === 'VERIFY_DOCUMENTS') {\n  const missing = (dispatch.documents || []).filter((doc) => !doc.present);\n  for (const doc of missing) {\n    exceptions.push({\n      code: 'MISSING_DOCUMENT',\n      message: `${doc.type} is missing.`,\n      controlStatus: 'BLOCKED'\n    });\n  }\n}\n\nreturn [{\n  json: {\n    ok: exceptions.length === 0,\n    action,\n    controlStatus: exceptions.length ? 'BLOCKED' : 'CLEAR',\n    exceptions,\n    recommendedNextStatus: exceptions.length ? dispatch.status : input.nextStatus || null,\n    auditedAt: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "evaluate-business-rules",
+      "name": "Evaluate Business Rules",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [280, 0]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "respond-to-app",
+      "name": "Respond to App",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [560, 0]
+    }
+  ],
+  "connections": {
+    "Dispatch Control Webhook": {
+      "main": [
+        [
+          {
+            "node": "Evaluate Business Rules",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Evaluate Business Rules": {
+      "main": [
+        [
+          {
+            "node": "Respond to App",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
