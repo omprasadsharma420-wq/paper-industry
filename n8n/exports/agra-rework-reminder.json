@@ -1,0 +1,149 @@
+{
+  "name": "Agra - Rework Reminder",
+  "active": false,
+  "nodes": [
+    {
+      "id": "6bd534de-5703-4da7-8a7c-5ff51f2e2978",
+      "name": "Agra - Rework Reminder Schedule",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        240,
+        300
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "days",
+              "daysInterval": 1,
+              "triggerAtHour": 9,
+              "triggerAtMinute": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "18c32270-0472-4f37-9e13-d93613ca3926",
+      "name": "Open Automation Session",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        520,
+        300
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://etykyasaicfhrbbtbdfv.supabase.co/auth/v1/token",
+        "authentication": "none",
+        "sendQuery": true,
+        "specifyQuery": "keypair",
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "grant_type",
+              "value": "password"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "specifyHeaders": "keypair",
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "sb_publishable_9CUzPDO-Ep08eZUihvGuYA_0smOgJA5"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": {
+          "email": "manager@agra-demo.example",
+          "password": "__AGRA_MANAGER_PASSWORD__"
+        },
+        "options": {
+          "timeout": 10000
+        }
+      }
+    },
+    {
+      "id": "4129fa2e-2924-499a-b7fd-192d8708031c",
+      "name": "Run OPEN_REWORK Monitor",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        800,
+        300
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://etykyasaicfhrbbtbdfv.supabase.co/rest/v1/rpc/agra_run_monitor",
+        "authentication": "none",
+        "sendHeaders": true,
+        "specifyHeaders": "keypair",
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "sb_publishable_9CUzPDO-Ep08eZUihvGuYA_0smOgJA5"
+            },
+            {
+              "name": "Authorization",
+              "value": "={{ \"Bearer \" + $json.access_token }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": {
+          "p_kind": "OPEN_REWORK"
+        },
+        "options": {
+          "timeout": 20000
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Agra - Rework Reminder Schedule": {
+      "main": [
+        [
+          {
+            "node": "Open Automation Session",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Open Automation Session": {
+      "main": [
+        [
+          {
+            "node": "Run OPEN_REWORK Monitor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": true
+  },
+  "tags": []
+}

@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "FG Dispatch Control",
-  description: "Controlled finished goods dispatch tracking pilot for paper manufacturing.",
+  title: "Agra Operations",
+  description: "Role-based paper-product operations reference pilot for Agra Industries.",
 };
 
 export default function RootLayout({

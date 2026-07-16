@@ -1,93 +1,71 @@
-# Paper Industry n8n Workflow
+# Agra Operations n8n Workflows
 
-This folder contains the importable n8n workflow for the dispatch control API.
+n8n authenticates callers, orchestrates requests, invokes Supabase business functions, records scheduled results, and returns structured responses. Supabase remains the transactional authority.
 
-## Files
+## Live Workflows
 
-- `dispatch-control-workflow.json` is the file to import into n8n.
-- `generate-dispatch-control-workflow.mjs` is the source generator for the workflow JSON.
-- `sample-payloads/` contains request examples for quick testing.
+| Workflow | Live ID | Purpose |
+| --- | --- | --- |
+| Agra Operations - Action Gateway | `UZvuu1IPh20GjfHD` | Authenticated action webhook |
+| Agra Operations - Health | `pRFpYvBkQEHME4px` | Public dependency health response |
+| Agra Operations - Low Stock | `QSvETTu9RecpoSAm` | Scheduled low-stock monitor |
+| Agra Operations - Rework Reminder | `iVzJLOQvg58Gf8DY` | Scheduled open-rework reminder |
+| Agra Operations - Exception Escalation | `GY44jKq757IcnplM` | Scheduled exception summary |
+| Agra Operations - Daily Report | `PEhfp25RNxnMqCi6` | Scheduled daily operations summary |
 
-## Import
+Production endpoints:
 
-1. Open n8n.
-2. Go to **Workflows**.
-3. Choose **Import from file**.
-4. Select `n8n/dispatch-control-workflow.json`.
-5. Save the workflow.
-6. Activate it.
+- `POST https://om420.app.n8n.cloud/webhook/agra-operations-action`
+- `GET https://om420.app.n8n.cloud/webhook/agra-operations-health`
 
-## Endpoints
+## Repository Files
 
-After activation, use:
+- `exports/*.json` - sanitized workflow files for n8n import
+- `workflows/*.mjs` - readable workflow definitions
+- `generate-agra-monitor-workflows.mjs` - generator for scheduled workflows
+- `sample-payloads/action-request.json` - action request shape
+- `sample-payloads/health-check.json` - health endpoint reference
 
-- `GET https://om420.app.n8n.cloud/webhook/paper-dispatch-health`
-- `POST https://om420.app.n8n.cloud/webhook/paper-dispatch-control`
+## Import and Configure
 
-While testing inside the n8n editor, use:
+1. Import each JSON file from `exports/` into n8n Cloud.
+2. Keep the action and health webhook paths unchanged unless the frontend environment is updated too.
+3. Replace `__AGRA_MANAGER_PASSWORD__` in scheduled workflow HTTP nodes with a protected n8n credential or secret expression.
+4. Save and publish each workflow.
+5. Run every scheduled workflow manually once and confirm a successful `agra_system_events` row in Supabase.
 
-- `GET https://om420.app.n8n.cloud/webhook-test/paper-dispatch-health`
-- `POST https://om420.app.n8n.cloud/webhook-test/paper-dispatch-control`
+The Supabase publishable key in these exports is intentionally non-secret. Never place a Supabase service-role key, database password, n8n access token, or user access token in an exported workflow.
 
-## Why This Version Is More Reliable
+## Action Contract
 
-The workflow accepts both n8n webhook-wrapped requests and direct JSON payloads. In n8n, webhook requests commonly arrive under `body`, while local/manual executions may pass the payload directly. The Code node normalizes both shapes before applying business rules.
+Request:
 
-## Supported Actions
+```json
+{
+  "requestId": "unique-uuid",
+  "action": "CHECK_STOCK",
+  "orderId": "order-uuid-or-null",
+  "payload": {}
+}
+```
 
-- `HEALTH_CHECK`
-- `VALIDATE_DISPATCH`
-- `CHECK_INVENTORY`
-- `SUBMIT_FOR_APPROVAL`
-- `APPROVE_AND_RESERVE`
-- `ASSIGN_VEHICLE`
-- `MARK_VEHICLE_ARRIVED`
-- `START_LOADING`
-- `COMPLETE_LOADING`
-- `VERIFY_WEIGHT`
-- `VERIFY_DOCUMENTS`
-- `CLEAR_GATE`
-- `CONFIRM_EXIT`
-- `RESOLVE_EXCEPTION`
-- `REJECT`
-- `CANCEL`
+Headers:
 
-## Response Shape
+```text
+Authorization: Bearer <Supabase user access token>
+Content-Type: application/json
+```
 
-Every response includes:
+Response:
 
-- `ok`
-- `httpStatus`
-- `policyVersion`
-- `traceId`
-- `action`
-- `currentStatus`
-- `recommendedNextStatus`
-- `nextRequiredRole`
-- `controlStatus`
-- `exceptions`
-- `warnings`
-- `reservations`
-- `inventoryMutations`
-- `report`
-- `auditEvent`
-- `uiMessage`
+```json
+{
+  "ok": true,
+  "code": "STOCK_CHECK_PASSED",
+  "message": "Stock check passed.",
+  "entityId": "order-uuid",
+  "newStatus": "AWAITING_APPROVAL"
+}
+```
 
-## Key Business Rules
-
-- Only `RELEASED` inventory can be reserved.
-- Stock is reserved FIFO by production date and batch number.
-- Blocked and pending-inspection stock is reported but never allocated.
-- Units must match exactly; automatic `KG` and `REAM` conversion is blocked.
-- Weight tolerance defaults to `1.5%`.
-- Gate clearance requires vehicle details, acceptable weight, verified documents, and no unresolved exceptions.
-- Required dispatch documents are `COMMERCIAL_INVOICE`, `DELIVERY_CHALLAN`, `PACKING_LIST`, and `GATE_PASS`.
-
-## Quick Tests
-
-Use these sample files as request bodies:
-
-- `sample-payloads/health-check.json`
-- `sample-payloads/approve-and-reserve.json`
-- `sample-payloads/verify-weight-block.json`
-- `sample-payloads/verify-documents-block.json`
+Business errors return `ok: false` with a stable code. Reusing a successful `requestId` returns the saved response with `idempotentReplay: true` and does not repeat the change.

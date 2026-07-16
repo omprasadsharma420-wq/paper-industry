@@ -1,0 +1,6 @@
+{
+  "requestId": "8cb1eb7c-34f6-4e97-8f17-73e64ef8ee6e",
+  "action": "CHECK_STOCK",
+  "orderId": "30000000-0000-4000-8000-000000000001",
+  "payload": {}
+}
