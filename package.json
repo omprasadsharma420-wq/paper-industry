@@ -8,6 +8,7 @@
     "build": "node scripts/build-sites.mjs",
     "start": "vinext start",
     "lint": "eslint",
+    "test:unit": "node --test --experimental-strip-types tests/*.test.mjs",
     "verify:demo": "node scripts/verify-demo.mjs"
   },
   "dependencies": {

@@ -1,0 +1,11 @@
+﻿{
+    "commit":  "9060d4fa361706f1766803a69d5905a0b353eb75",
+    "branch":  "codex/agra-operations-pilot",
+    "tag":  "pre-agra-pilot-20260717",
+    "sites_project":  "appgprj_6a5763c66bd48191947142784450ab36",
+    "sites_version":  7,
+    "live_url":  "https://paper-industry-dispatch-control.trafangularlaw01.chatgpt.site",
+    "supabase_project":  "etykyasaicfhrbbtbdfv",
+    "n8n_policy":  "2026-07-15.dispatch-control.v2",
+    "captured_at":  "2026-07-16T20:33:52.2263311Z"
+}

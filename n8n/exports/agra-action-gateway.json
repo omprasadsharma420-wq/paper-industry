@@ -1,0 +1,426 @@
+{
+  "name": "Agra - Operations Action Gateway",
+  "active": false,
+  "nodes": [
+    {
+      "id": "004f4110-2876-426d-a554-fbf4d603dda3",
+      "name": "Receive Operations Action",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        160,
+        300
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "agra-operations-action",
+        "authentication": "none",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "*"
+        }
+      },
+      "webhookId": "f90102bb-b0c6-418e-bd3c-b80e2344d36d"
+    },
+    {
+      "id": "7f7e189a-c308-436f-a032-b4c2d8dd6975",
+      "name": "Normalize Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        400,
+        300
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const input = $input.first()?.json ?? {};\nconst body = input.body && typeof input.body === 'object' && !Array.isArray(input.body) ? input.body : {};\nconst authorization = String(input.headers?.authorization ?? input.headers?.Authorization ?? '');\nconst accessToken = authorization.replace(/^Bearer\\s+/i, '').trim();\nconst requestId = String(body.requestId ?? body.request_id ?? '').trim();\nconst action = String(body.action ?? '').trim().toUpperCase();\nconst orderId = body.orderId ?? body.order_id ?? null;\nconst payload = body.payload && typeof body.payload === 'object' && !Array.isArray(body.payload) ? body.payload : {};\nconst allowedActions = new Set(['CREATE_CUSTOMER','CREATE_PRODUCT','RECEIVE_BATCH','INSPECT_BATCH','UPDATE_PROFILE','CREATE_ORDER','RESET_DEMO','UPDATE_DRAFT_ORDER','SUBMIT_ORDER','CHECK_STOCK','RECORD_PRODUCTION','APPROVE_ORDER','START_PICKING','COMPLETE_PICKING','RECORD_QC','COMPLETE_REWORK','COMPLETE_PACKING','VERIFY_DOCUMENTS','CONFIRM_HANDOVER','CANCEL_ORDER','RESOLVE_EXCEPTION']);\nconst errors = [];\nif (!accessToken) errors.push('Sign in is required.');\nif (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(requestId)) errors.push('A valid request ID is required.');\nif (!allowedActions.has(action)) errors.push('This action is not supported.');\nif (orderId && !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(orderId))) errors.push('The order ID is not valid.');\nreturn [{ json: { valid: errors.length === 0, errors, accessToken, requestId, action, orderId, payload } }];"
+      }
+    },
+    {
+      "id": "b1719386-b13a-4056-b5a3-6765033272ca",
+      "name": "Request Is Valid",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        640,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.valid }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "rightValue": ""
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "645399f6-c713-4d0d-880b-604014ce6a23",
+      "name": "Verify Supabase User",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        880,
+        180
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "https://etykyasaicfhrbbtbdfv.supabase.co/auth/v1/user",
+        "authentication": "none",
+        "sendHeaders": true,
+        "specifyHeaders": "keypair",
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "sb_publishable_9CUzPDO-Ep08eZUihvGuYA_0smOgJA5"
+            },
+            {
+              "name": "Authorization",
+              "value": "={{ \"Bearer \" + $json.accessToken }}"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 10000
+        }
+      }
+    },
+    {
+      "id": "ed32a73b-ef0e-4492-a331-8252da5a8134",
+      "name": "Evaluate User",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        180
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const response = $input.first()?.json ?? {};\nconst request = $('Normalize Request').first().json;\nconst statusCode = Number(response.statusCode ?? 0);\nconst user = response.body ?? {};\nconst authorized = statusCode >= 200 && statusCode < 300 && Boolean(user.id);\nreturn [{ json: { ...request, authorized, authStatusCode: statusCode, userId: user.id ?? null } }];"
+      }
+    },
+    {
+      "id": "5c4ecfb1-9ac1-4a1a-ae38-cea56349bb34",
+      "name": "User Is Authorized",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1360,
+        180
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.authorized }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "rightValue": ""
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "a754ba1a-3c6a-4290-a4ad-a854fcea945e",
+      "name": "Execute Transaction",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1600,
+        80
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://etykyasaicfhrbbtbdfv.supabase.co/rest/v1/rpc/agra_execute_action",
+        "authentication": "none",
+        "sendHeaders": true,
+        "specifyHeaders": "keypair",
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "sb_publishable_9CUzPDO-Ep08eZUihvGuYA_0smOgJA5"
+            },
+            {
+              "name": "Authorization",
+              "value": "={{ \"Bearer \" + $json.accessToken }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ ({ p_request_id: $json.requestId, p_action: $json.action, p_order_id: $json.orderId || null, p_payload: { ...$json.payload, source: \"N8N\" } }) }}",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 20000
+        }
+      }
+    },
+    {
+      "id": "aa1aa2dc-438d-485a-b0ff-2e4b993852c2",
+      "name": "Format Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1840,
+        80
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const rpc = $input.first()?.json ?? {};\nconst statusCode = Number(rpc.statusCode ?? 500);\nconst body = rpc.body ?? rpc;\nif (statusCode >= 200 && statusCode < 300) return [{ json: { statusCode, response: body } }];\nconst message = body?.message ?? body?.error_description ?? 'The operation could not be completed.';\nreturn [{ json: { statusCode: statusCode >= 400 && statusCode < 600 ? statusCode : 500, response: { ok: false, code: body?.code ?? 'OPERATION_FAILED', message, details: body?.details ?? null } } }];"
+      }
+    },
+    {
+      "id": "413c29fb-81e3-4117-8a0b-84624d51bb3f",
+      "name": "Return Result",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        2080,
+        80
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json.response }}",
+        "options": {
+          "responseCode": "={{ $json.statusCode }}",
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              },
+              {
+                "name": "Cache-Control",
+                "value": "no-store"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "89532dde-b935-4759-8955-54a885f89505",
+      "name": "Return Sign In Required",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1600,
+        300
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{ \"ok\": false, \"code\": \"AUTH_REQUIRED\", \"message\": \"Your session has expired. Please sign in again.\" }",
+        "options": {
+          "responseCode": 401,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              },
+              {
+                "name": "Cache-Control",
+                "value": "no-store"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "ae64c1d9-bcd9-461a-bc3f-82d3e38dc1f4",
+      "name": "Return Invalid Request",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        880,
+        440
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ ({ ok: false, code: \"INVALID_REQUEST\", message: $json.errors[0] || \"The request is invalid.\", errors: $json.errors }) }}",
+        "options": {
+          "responseCode": 400,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              },
+              {
+                "name": "Cache-Control",
+                "value": "no-store"
+              }
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Receive Operations Action": {
+      "main": [
+        [
+          {
+            "node": "Normalize Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Request": {
+      "main": [
+        [
+          {
+            "node": "Request Is Valid",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Request Is Valid": {
+      "main": [
+        [
+          {
+            "node": "Verify Supabase User",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Return Invalid Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verify Supabase User": {
+      "main": [
+        [
+          {
+            "node": "Evaluate User",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Evaluate User": {
+      "main": [
+        [
+          {
+            "node": "User Is Authorized",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "User Is Authorized": {
+      "main": [
+        [
+          {
+            "node": "Execute Transaction",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Return Sign In Required",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Transaction": {
+      "main": [
+        [
+          {
+            "node": "Format Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Result": {
+      "main": [
+        [
+          {
+            "node": "Return Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": true
+  },
+  "tags": []
+}

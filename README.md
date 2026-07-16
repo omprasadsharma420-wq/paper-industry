@@ -1,98 +1,74 @@
-# Paper Industry Dispatch Control Pilot
+# Agra Operations Reference Pilot
 
-Controlled Finished Goods Dispatch Tracking and Reporting for a medium-sized paper manufacturing company in Nepal/India.
+Agra Paper Products Order, Inventory, Quality, Packing, Dispatch, and Management Dashboard for Agra Industries Pvt. Ltd., Nepal.
 
-The pilot demonstrates approval controls, released-stock checks, quality blocks, inventory reservation, vehicle movement, loading, weight verification, document verification, gate clearance, dispatch confirmation, and audit history.
+This is a working reference pilot based on preliminary company information. Products, roles, controls, approval rules, and reporting fields require operational validation before production use.
 
-## Tech Stack
+## Live Architecture
 
-- Next.js
-- TypeScript
-- Tailwind CSS
-- Supabase-backed shared operational state
-- n8n production control workflow
+- Next.js 16, React 19, TypeScript, Tailwind CSS, and Lucide icons
+- Supabase Auth with five real demo users
+- Supabase PostgreSQL as the transactional system of record
+- Row Level Security and organization-scoped read access
+- Authoritative database functions for actions, locking, idempotency, and audit
+- n8n Cloud as the authenticated action gateway and scheduled monitor layer
+- ChatGPT Sites deployment with a public, shareable URL
 
-## Demo Login Roles
+No browser fallback or fictional local state is used. If Supabase or n8n is unavailable, the application reports the failure and does not present an unconfirmed change.
 
-Use the login screen to enter as:
+## Roles
 
-- `DISPATCH_CLERK`
-- `WAREHOUSE_QUALITY`
-- `DISPATCH_SUPERVISOR`
-- `GATE_SECURITY`
-- `MANAGER_ADMIN`
+| Role | Demo email | Main work |
+| --- | --- | --- |
+| Sales & Orders | `sales@agra-demo.example` | Customers, drafts, order submission |
+| Stock & Quality | `quality@agra-demo.example` | Stock checks, batch QC, order QC, rework |
+| Packing & Dispatch | `packing@agra-demo.example` | Picking, packing, documents, handover |
+| Operations Supervisor | `supervisor@agra-demo.example` | Approval, cancellation, exceptions, reports |
+| Manager | `manager@agra-demo.example` | Full visibility, team access, system health, reset |
 
-Actions are role based. Users only see workflow actions available to their role.
+The shared demo password is supplied separately and is never stored in the repository.
 
 ## Run Locally
-
-This workspace uses Codex's bundled Node and pnpm runtime. In a normal machine with Node installed:
 
 ```bash
 pnpm install
 pnpm dev
 ```
 
-In this Codex desktop workspace, commands need the bundled runtime on PATH:
-
-```powershell
-$env:PATH='C:\Users\ompra\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin;C:\Users\ompra\.cache\codex-runtimes\codex-primary-runtime\dependencies\bin;' + $env:PATH
-pnpm dev
-```
-
-## Supabase
-
-The versioned migrations are in:
-
-```text
-supabase/migrations/
-```
-
-The app includes a Supabase client at:
-
-```text
-src/lib/supabase.ts
-```
-
-Copy `.env.example` to `.env.local` when running against the live demo backend.
-
-## n8n
-
-Import this workflow into n8n Cloud:
-
-```text
-n8n/dispatch-control-workflow.json
-```
-
-Production webhook base URL:
-
-```text
-https://om420.app.n8n.cloud/webhook
-```
-
-The workflow provides:
-
-```text
-GET /paper-dispatch-health
-POST /paper-dispatch-control
-```
-
-The dispatch-control endpoint handles validation, approval/reservation, vehicle movement, weight checks, document checks, gate clearance, and exit confirmation.
+Copy `.env.example` to `.env.local`. The Supabase publishable key is public by design; never place a Supabase secret or service-role key in a `NEXT_PUBLIC_*` variable.
 
 ## Verification
 
-With the three public environment variables configured, run:
-
 ```bash
+pnpm test:unit
+pnpm lint
+pnpm exec tsc --noEmit
+pnpm build
+```
+
+Run the live integration and failure-scenario suite with the demo password supplied only to the process:
+
+```powershell
+$env:AGRA_DEMO_PASSWORD='<demo password>'
 pnpm verify:demo
 ```
 
-The verifier runs a prepared dispatch through every role using the production n8n webhook and Supabase RPCs, checks shared truck, weight, paper, and inventory data, creates a new job, and resets the presentation dataset when it finishes.
+The live verifier tests authentication, permissions, RLS, reset, insufficient stock, rework, missing documents, duplicate orders, idempotency, cancellation, concurrent reservations, failed QC, the full 200-diary dispatch, refresh persistence, n8n health, and outage behavior. It restores the reference dataset in a `finally` block.
 
-## Business Rules
+## Project Map
 
-See:
+- `src/components/agra-operations-app.tsx` - role-specific operational interface
+- `src/lib/agra-backend.ts` - Supabase and n8n client boundary
+- `src/lib/agra-rules.ts` - display and workflow rule helpers
+- `supabase/migrations/` - additive schema, seed, actions, read model, and hardening
+- `n8n/exports/` - sanitized importable workflows
+- `n8n/workflows/` - workflow sources
+- `scripts/verify-demo.mjs` - production integration suite
+- `docs/business-rules.md` - pilot business controls
+- `docs/testing-and-demo.md` - test evidence and presentation flow
+- `docs/operations-runbook.md` - health, reset, deployment, and rollback
+- `backups/pre-agra-pilot-20260717/` - prebuild database, n8n, data, and hosting record
 
-```text
-docs/business-rules.md
-```
+## Scope Boundary
+
+Phase 1 covers paper-product commercial operations only. Accounting, tax, payroll, raw-material procurement, full production planning, broom operations, community-program monitoring, and impact traceability remain future modules.

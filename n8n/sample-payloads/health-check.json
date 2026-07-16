@@ -1,3 +1,4 @@
 {
-  "action": "HEALTH_CHECK"
+  "method": "GET",
+  "url": "https://om420.app.n8n.cloud/webhook/agra-operations-health"
 }

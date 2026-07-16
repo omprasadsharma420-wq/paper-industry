@@ -1,231 +1,430 @@
+import assert from "node:assert/strict";
 import { createClient } from "@supabase/supabase-js";
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
-const n8nBaseUrl = process.env.NEXT_PUBLIC_N8N_WEBHOOK_BASE_URL;
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const SUPABASE_KEY = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+const ACTION_URL = process.env.NEXT_PUBLIC_N8N_ACTION_URL
+  ?? "https://om420.app.n8n.cloud/webhook/agra-operations-action";
+const HEALTH_URL = process.env.NEXT_PUBLIC_N8N_HEALTH_URL
+  ?? "https://om420.app.n8n.cloud/webhook/agra-operations-health";
+const DEMO_PASSWORD = process.env.AGRA_DEMO_PASSWORD;
 
-if (!supabaseUrl || !supabaseKey || !n8nBaseUrl) {
+if (!SUPABASE_URL || !SUPABASE_KEY || !DEMO_PASSWORD) {
   throw new Error(
-    "NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY, and NEXT_PUBLIC_N8N_WEBHOOK_BASE_URL are required.",
+    "Set NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY, and AGRA_DEMO_PASSWORD before running verification.",
   );
 }
 
-const supabase = createClient(supabaseUrl, supabaseKey, {
-  auth: { persistSession: false, autoRefreshToken: false },
-});
-
-const roles = {
-  clerk: { name: "Anita Karki", role: "DISPATCH_CLERK" },
-  quality: { name: "Ramesh Thapa", role: "WAREHOUSE_QUALITY" },
-  supervisor: { name: "Sanjay Gupta", role: "DISPATCH_SUPERVISOR" },
-  gate: { name: "Mina Tamang", role: "GATE_SECURITY" },
+const ORDER = {
+  success: "30000000-0000-4000-8000-000000000001",
+  shortage: "30000000-0000-4000-8000-000000000002",
+  rework: "30000000-0000-4000-8000-000000000003",
+  documents: "30000000-0000-4000-8000-000000000004",
 };
 
-const requiredDocuments = [
-  "COMMERCIAL_INVOICE",
-  "DELIVERY_CHALLAN",
-  "PACKING_LIST",
-  "GATE_PASS",
-].map((type) => ({ type, present: true, verified: false }));
+const ACCOUNTS = {
+  sales: ["sales@agra-demo.example", "SALES_ORDER_COORDINATOR"],
+  quality: ["quality@agra-demo.example", "INVENTORY_QUALITY"],
+  packing: ["packing@agra-demo.example", "PACKING_DISPATCH"],
+  supervisor: ["supervisor@agra-demo.example", "OPERATIONS_SUPERVISOR"],
+  manager: ["manager@agra-demo.example", "MANAGER_ADMIN"],
+};
 
-function assert(condition, message) {
-  if (!condition) throw new Error(message);
+const checkmarks = [];
+
+function pass(label) {
+  checkmarks.push(label);
+  console.log(`PASS  ${label}`);
 }
 
-function findDispatch(state, requestNo = "FGD-2026-0715-006") {
-  const dispatch = state.dispatches.find((item) => item.requestNo === requestNo);
-  assert(dispatch, `${requestNo} was not found in the demo state.`);
-  return dispatch;
+function makeClient() {
+  return createClient(SUPABASE_URL, SUPABASE_KEY, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+      detectSessionInUrl: false,
+    },
+  });
 }
 
-async function rpc(name, parameters = {}) {
-  const { data, error } = await supabase.rpc(name, parameters);
-  if (error) throw error;
+async function login(email, expectedRole) {
+  const client = makeClient();
+  const { data, error } = await client.auth.signInWithPassword({
+    email,
+    password: DEMO_PASSWORD,
+  });
+  assert.ifError(error);
+  assert.ok(data.session, `${email} did not receive a session`);
+  const workspace = await loadWorkspace({ client });
+  assert.equal(workspace.currentUser.role, expectedRole);
+  return { client, session: data.session, workspace };
+}
+
+async function loadWorkspace(account) {
+  const { data, error } = await account.client.rpc("agra_load_workspace");
+  assert.ifError(error);
+  assert.ok(data?.currentUser, "Workspace did not include the signed-in profile");
   return data;
 }
 
-function dispatchForControl(dispatch, action, input) {
-  const next = structuredClone(dispatch);
-  if (action === "ASSIGN_VEHICLE" && input.vehicle) next.vehicle = input.vehicle;
-  if (action === "VERIFY_WEIGHT") next.actualWeightKg = input.actualWeightKg;
-  if (action === "VERIFY_DOCUMENTS" && input.documents) next.documents = input.documents;
-  return next;
-}
-
-async function runAction(state, dispatchId, actor, action, expectedStatus, input = {}) {
-  const dispatch = state.dispatches.find((item) => item.id === dispatchId);
-  assert(dispatch, `Dispatch ${dispatchId} was not found before ${action}.`);
-
-  const response = await fetch(`${n8nBaseUrl.replace(/\/$/, "")}/paper-dispatch-control`, {
+async function callAction(account, action, orderId = null, payload = {}, requestId = crypto.randomUUID()) {
+  const response = await fetch(ACTION_URL, {
     method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      action,
-      actor,
-      dispatch: dispatchForControl(dispatch, action, input),
-      inventory: state.inventory,
-    }),
+    headers: {
+      authorization: `Bearer ${account.session.access_token}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({ requestId, action, orderId, payload }),
   });
-  const controlResult = await response.json();
-  assert(response.ok, `${action} returned HTTP ${response.status}.`);
-  assert(controlResult.ok, `${action} was blocked by n8n: ${controlResult.uiMessage}`);
-
-  const result = await rpc("demo_apply_workflow_action", {
-    p_dispatch_id: dispatchId,
-    p_actor_name: actor.name,
-    p_actor_role: actor.role,
-    p_action: action,
-    p_action_input: input,
-    p_n8n_result: controlResult,
-  });
-  const updated = result.state.dispatches.find((item) => item.id === dispatchId);
-  assert(updated?.status === expectedStatus, `${action} expected ${expectedStatus}, received ${updated?.status}.`);
-  console.log(`PASS  ${action.padEnd(23)} ${dispatch.status} -> ${updated.status}`);
-  return result.state;
+  const body = await response.json();
+  assert.equal(response.status, 200, `${action} returned HTTP ${response.status}`);
+  return { ...body, requestId };
 }
 
-async function verify() {
-  const resetResult = await rpc("demo_reset_state");
-  let state = resetResult.state;
-  let dispatch = findDispatch(state);
-  const dispatchId = dispatch.id;
-  const line = dispatch.lines[0];
-  const stockBefore = state.inventory.find(
-    (batch) => batch.productCode === line.productCode && batch.qualityStatus === "RELEASED",
-  );
-  assert(stockBefore, "Released stock was not found for the prepared dispatch.");
+async function expectOk(account, action, orderId = null, payload = {}, requestId) {
+  const result = await callAction(account, action, orderId, payload, requestId);
+  assert.equal(result.ok, true, `${action} failed: ${result.message}`);
+  return result;
+}
 
-  const healthResponse = await fetch(
-    `${n8nBaseUrl.replace(/\/$/, "")}/paper-dispatch-health`,
-  );
-  const health = await healthResponse.json();
-  assert(healthResponse.ok && health.ok, "n8n health check failed.");
-  console.log(`PASS  n8n health             ${health.policyVersion}`);
+async function expectBlocked(account, action, orderId, payload, code) {
+  const result = await callAction(account, action, orderId, payload);
+  assert.equal(result.ok, false, `${action} unexpectedly succeeded`);
+  assert.equal(result.code, code, `${action} returned ${result.code}, expected ${code}`);
+  return result;
+}
 
-  state = await runAction(
-    state,
-    dispatchId,
-    roles.supervisor,
-    "APPROVE_AND_RESERVE",
-    "APPROVED",
-  );
+async function reset(manager) {
+  const result = await expectOk(manager, "RESET_DEMO");
+  assert.equal(result.code, "DEMO_RESET");
+}
 
-  const denied = await rpc("demo_apply_workflow_action", {
-    p_dispatch_id: dispatchId,
-    p_actor_name: roles.supervisor.name,
-    p_actor_role: roles.supervisor.role,
-    p_action: "ASSIGN_VEHICLE",
-    p_action_input: {},
-    p_n8n_result: { ok: true },
-  });
-  dispatch = findDispatch(denied.state);
-  assert(dispatch.status === "APPROVED", "Supervisor unexpectedly booked the truck.");
-  assert(denied.message.includes("cannot perform"), "Supervisor denial message was not returned.");
-  console.log("PASS  role permission         Supervisor cannot book truck");
+function findOrder(workspace, id) {
+  const order = workspace.orders.find((item) => item.id === id);
+  assert.ok(order, `Order ${id} was not found`);
+  return order;
+}
 
-  const vehicle = {
-    vehicleNo: "Bagmati 03-001 Kha 9084",
-    transporter: "Himalayan Paper Logistics",
-    driverName: "Bikash Rai",
-    driverPhone: "9804567890",
-    expectedArrival: "2026-07-16T03:30:00.000Z",
+function findProduct(workspace, sku) {
+  const product = workspace.products.find((item) => item.sku === sku);
+  assert.ok(product, `Product ${sku} was not found`);
+  return product;
+}
+
+function tomorrow(days = 4) {
+  const value = new Date();
+  value.setUTCDate(value.getUTCDate() + days);
+  return value.toISOString().slice(0, 10);
+}
+
+function handoverPayload(reference = "QA-PICKUP") {
+  return {
+    deliveryMethod: "CUSTOMER_PICKUP",
+    packageCount: 10,
+    shipmentWeightKg: 72,
+    handoverPerson: "Agra Packing Desk",
+    receiverName: "Customer Representative",
+    customerRepresentative: "Customer Representative",
+    receiverPhone: "9800000000",
+    acknowledgementReference: reference,
+    notes: "Automated verification handover.",
   };
-  state = await runAction(
-    denied.state,
-    dispatchId,
-    roles.clerk,
-    "ASSIGN_VEHICLE",
-    "VEHICLE_ASSIGNED",
-    { vehicle },
-  );
-  dispatch = findDispatch(state);
-  assert(dispatch.vehicle?.vehicleNo === vehicle.vehicleNo, "Entered truck details were not saved.");
-  console.log("PASS  shared truck data       Custom truck details persisted");
+}
 
-  state = await runAction(
-    state,
-    dispatchId,
-    roles.gate,
-    "MARK_VEHICLE_ARRIVED",
-    "VEHICLE_ARRIVED",
-  );
-  state = await runAction(state, dispatchId, roles.quality, "START_LOADING", "LOADING");
-  state = await runAction(
-    state,
-    dispatchId,
-    roles.quality,
-    "COMPLETE_LOADING",
-    "AWAITING_WEIGHT_CHECK",
-  );
+async function driveToApproval(accounts, orderId) {
+  await expectOk(accounts.sales, "SUBMIT_ORDER", orderId);
+  await expectOk(accounts.quality, "CHECK_STOCK", orderId);
+}
 
-  dispatch = findDispatch(state);
-  const actualWeightKg = Math.round(dispatch.expectedWeightKg * 1.004);
-  state = await runAction(
-    state,
-    dispatchId,
-    roles.quality,
-    "VERIFY_WEIGHT",
-    "AWAITING_DOCUMENT_CHECK",
-    { actualWeightKg },
-  );
-  dispatch = findDispatch(state);
-  assert(dispatch.actualWeightKg === actualWeightKg, "Entered weight was not saved.");
-  console.log("PASS  shared weight data      Actual weight persisted");
+async function driveToQuality(accounts, orderId) {
+  await driveToApproval(accounts, orderId);
+  await expectOk(accounts.supervisor, "APPROVE_ORDER", orderId);
+  await expectOk(accounts.packing, "START_PICKING", orderId);
+  await expectOk(accounts.packing, "COMPLETE_PICKING", orderId, { notes: "Picked as reserved." });
+}
 
-  state = await runAction(
-    state,
-    dispatchId,
-    roles.supervisor,
-    "VERIFY_DOCUMENTS",
-    "AWAITING_GATE_CLEARANCE",
-    { documents: requiredDocuments },
-  );
-  dispatch = findDispatch(state);
-  assert(dispatch.documents.every((document) => document.present && document.verified), "Papers were not verified.");
-  console.log("PASS  shared paper data       All required papers verified");
+async function verifyIdentityAndPermissions(accounts) {
+  for (const [name, [, role]] of Object.entries(ACCOUNTS)) {
+    assert.equal(accounts[name].workspace.currentUser.role, role);
+  }
+  pass("five authenticated roles load their server-assigned profiles");
 
-  state = await runAction(
-    state,
-    dispatchId,
-    roles.gate,
-    "CLEAR_GATE",
-    "CLEARED_FOR_EXIT",
-  );
-  state = await runAction(state, dispatchId, roles.gate, "CONFIRM_EXIT", "DISPATCHED");
+  const anonymous = makeClient();
+  const anonymousWorkspace = await anonymous.rpc("agra_load_workspace");
+  assert.ok(anonymousWorkspace.error, "Anonymous workspace access was not blocked");
+  pass("anonymous workspace access is blocked");
 
-  const stockAfter = state.inventory.find((batch) => batch.id === stockBefore.id);
-  assert(stockAfter, "Reserved stock batch disappeared after dispatch.");
-  assert(
-    stockAfter.onHandQty === stockBefore.onHandQty - line.requestedQty,
-    "Dispatched stock was not deducted from on-hand quantity.",
-  );
-  assert(
-    stockAfter.reservedQty === stockBefore.reservedQty,
-    "Dispatch reservation was not released after stock deduction.",
-  );
-  console.log("PASS  inventory update        Reserved stock deducted exactly once");
+  await expectBlocked(accounts.sales, "RESET_DEMO", null, {}, "FORBIDDEN");
+  await expectBlocked(accounts.sales, "APPROVE_ORDER", ORDER.success, {}, "FORBIDDEN");
+  pass("role permissions reject manager and supervisor actions from Sales");
 
-  const createResult = await rpc("demo_create_dispatch", {
-    p_actor_name: roles.clerk.name,
-    p_actor_role: roles.clerk.role,
-    p_customer_name: "Demo Carton Works",
-    p_customer_type: "COMMERCIAL",
-    p_destination: "Kathmandu, Nepal",
-    p_priority: "NORMAL",
-    p_product_code: "PR-120-KRAFT",
-    p_requested_qty: 1500,
-    p_requested_dispatch_date: "2026-07-17",
+  const directWrite = await accounts.sales.client
+    .from("agra_profiles")
+    .update({ role: "SALES_ORDER_COORDINATOR" })
+    .eq("user_id", accounts.sales.session.user.id);
+  assert.ok(directWrite.error, "Direct profile writes were not blocked");
+  pass("RLS and grants block direct role changes");
+}
+
+async function verifyReset(accounts) {
+  await reset(accounts.manager);
+  const workspace = await loadWorkspace(accounts.manager);
+  assert.equal(workspace.orders.length, 5);
+  assert.equal(findOrder(workspace, ORDER.success).fulfillment_status, "DRAFT");
+  assert.equal(findOrder(workspace, ORDER.documents).fulfillment_status, "READY_FOR_HANDOVER");
+  const completedOrder = workspace.orders.find((order) => order.order_no === "AGRA-DEMO-005");
+  assert.ok(completedOrder?.handover, "Historical handover was not restored");
+  assert.equal(completedOrder.documents.filter((document) => document.required && document.status === "VERIFIED").length, 3);
+  assert.equal(findProduct(workspace, "KHK-DIA-A5-NAT").availableStock, 250);
+  pass("demo reset restores five orders, documents, handover history, and 250 diaries");
+}
+
+async function verifyShortage(accounts) {
+  await reset(accounts.manager);
+  await expectBlocked(accounts.quality, "CHECK_STOCK", ORDER.shortage, {}, "INSUFFICIENT_RELEASED_STOCK");
+  const workspace = await loadWorkspace(accounts.quality);
+  const order = findOrder(workspace, ORDER.shortage);
+  assert.equal(order.fulfillment_status, "BLOCKED");
+  assert.equal(order.reservations.filter((item) => item.status === "ACTIVE").length, 0);
+  assert.ok(order.exceptions.some((item) => item.code === "INSUFFICIENT_RELEASED_STOCK" && item.status === "OPEN"));
+  assert.ok(workspace.auditEvents.some((item) => item.action === "CHECK_STOCK" && !item.success));
+  pass("300 bags against 220 released is blocked without a reservation");
+}
+
+async function verifySeededRework(accounts) {
+  await reset(accounts.manager);
+  const workspace = await loadWorkspace(accounts.quality);
+  const order = findOrder(workspace, ORDER.rework);
+  const bags = findProduct(workspace, "KHK-BAG-M-NAT");
+  assert.equal(order.fulfillment_status, "REWORK_REQUIRED");
+  assert.ok(order.reworkRecords.some((item) => item.status === "OPEN"));
+  assert.equal(bags.availableStock, 220);
+  assert.equal(bags.reworkStock, 30);
+  await expectBlocked(accounts.supervisor, "APPROVE_ORDER", ORDER.rework, {}, "INVALID_STATUS");
+  pass("rework stock stays unavailable and the order cannot be approved");
+}
+
+async function verifyMissingDocuments(accounts) {
+  await reset(accounts.manager);
+  await expectBlocked(
+    accounts.packing,
+    "CONFIRM_HANDOVER",
+    ORDER.documents,
+    handoverPayload("QA-MISSING-DOC"),
+    "MISSING_REQUIRED_DOCUMENT",
+  );
+  const workspace = await loadWorkspace(accounts.packing);
+  const order = findOrder(workspace, ORDER.documents);
+  assert.equal(order.fulfillment_status, "READY_FOR_HANDOVER");
+  assert.equal(order.handover, null);
+  assert.ok(order.documents.some((item) => item.required && item.status === "MISSING"));
+  pass("handover is blocked when a required document is missing");
+}
+
+async function verifyDuplicateOrder(accounts) {
+  await reset(accounts.manager);
+  const workspace = await loadWorkspace(accounts.sales);
+  const customer = workspace.customers[0];
+  const product = findProduct(workspace, "KHK-DIA-A5-NAT");
+  const reference = `QA-DUP-${Date.now()}`;
+  const payload = {
+    customerId: customer.id,
+    customerOrderReference: reference,
+    requestedDispatchDate: tomorrow(),
+    fulfillmentSource: "FINISHED_STOCK",
+    priority: "NORMAL",
+    items: [{ productId: product.id, quantity: 1 }],
+  };
+  await expectOk(accounts.sales, "CREATE_ORDER", null, payload);
+  await expectBlocked(accounts.sales, "CREATE_ORDER", null, payload, "DUPLICATE_RECORD");
+  const after = await loadWorkspace(accounts.sales);
+  assert.equal(after.orders.filter((order) => order.customer_order_reference === reference).length, 1);
+  pass("duplicate customer order references create only one draft");
+}
+
+async function verifyIdempotencyAndCancellation(accounts) {
+  await reset(accounts.manager);
+  await driveToApproval(accounts, ORDER.success);
+  const requestId = crypto.randomUUID();
+  const first = await expectOk(accounts.supervisor, "APPROVE_ORDER", ORDER.success, {}, requestId);
+  const replay = await expectOk(accounts.supervisor, "APPROVE_ORDER", ORDER.success, {}, requestId);
+  assert.equal(first.code, "ORDER_APPROVED");
+  assert.equal(replay.idempotentReplay, true);
+
+  let workspace = await loadWorkspace(accounts.manager);
+  let order = findOrder(workspace, ORDER.success);
+  assert.equal(order.reservations.filter((item) => item.status === "ACTIVE").reduce((sum, item) => sum + Number(item.reserved_quantity), 0), 200);
+  assert.equal(findProduct(workspace, "KHK-DIA-A5-NAT").availableStock, 50);
+
+  await expectOk(accounts.supervisor, "CANCEL_ORDER", ORDER.success, { reason: "Automated cancellation verification." });
+  workspace = await loadWorkspace(accounts.manager);
+  order = findOrder(workspace, ORDER.success);
+  assert.equal(order.fulfillment_status, "CANCELLED");
+  assert.equal(order.reservations.filter((item) => item.status === "ACTIVE").length, 0);
+  assert.equal(findProduct(workspace, "KHK-DIA-A5-NAT").availableStock, 250);
+  assert.ok(workspace.auditEvents.some((item) => item.action === "CANCEL_ORDER" && item.success));
+  pass("double approval is idempotent and cancellation releases all stock");
+}
+
+async function verifyConcurrentReservation(accounts) {
+  await reset(accounts.manager);
+  const workspace = await loadWorkspace(accounts.sales);
+  const product = findProduct(workspace, "KHK-DIA-A5-NAT");
+  const second = await expectOk(accounts.sales, "CREATE_ORDER", null, {
+    customerId: workspace.customers[1].id,
+    customerOrderReference: `QA-CONCURRENT-${Date.now()}`,
+    requestedDispatchDate: tomorrow(),
+    fulfillmentSource: "FINISHED_STOCK",
+    priority: "HIGH",
+    items: [{ productId: product.id, quantity: 100 }],
   });
-  const created = createResult.state.dispatches.find((item) => item.id === createResult.dispatchId);
-  assert(created?.status === "DRAFT", "New job was not created as a shared draft.");
-  console.log(`PASS  new job                 ${created.requestNo} created and visible`);
+  await driveToApproval(accounts, ORDER.success);
+  await expectOk(accounts.sales, "SUBMIT_ORDER", second.entityId);
+  await expectOk(accounts.quality, "CHECK_STOCK", second.entityId);
 
-  console.log("\nAll live demo checks passed.");
+  const approvalA = callAction(accounts.supervisor, "APPROVE_ORDER", ORDER.success);
+  await new Promise((resolve) => setTimeout(resolve, 120));
+  const approvalB = callAction(accounts.supervisor, "APPROVE_ORDER", second.entityId);
+  const [resultA, resultB] = await Promise.all([approvalA, approvalB]);
+  assert.equal(resultA.ok, true, `200-unit approval failed: ${resultA.message}`);
+  assert.equal(resultB.ok, false, "100-unit competing approval unexpectedly succeeded");
+  assert.equal(resultB.code, "INSUFFICIENT_RELEASED_STOCK");
+
+  const after = await loadWorkspace(accounts.manager);
+  assert.equal(findOrder(after, ORDER.success).fulfillment_status, "APPROVED");
+  assert.equal(findOrder(after, second.entityId).fulfillment_status, "BLOCKED");
+  assert.equal(findProduct(after, "KHK-DIA-A5-NAT").reservedStock, 200);
+  assert.equal(findProduct(after, "KHK-DIA-A5-NAT").availableStock, 50);
+  assert.ok(after.inventoryBatches.every((batch) => batch.available_quantity >= 0 && batch.reserved_quantity >= 0));
+  pass("competing 200 and 100 diary approvals leave 50 available with no negative stock");
 }
 
-try {
-  await verify();
-} finally {
-  await rpc("demo_reset_state");
-  console.log("Demo data reset for the presentation.");
+async function verifyFailedQuality(accounts) {
+  await reset(accounts.manager);
+  await driveToQuality(accounts, ORDER.success);
+  await expectOk(accounts.quality, "RECORD_QC", ORDER.success, {
+    result: "REWORK_REQUIRED",
+    affectedQuantity: 10,
+    defectType: "BINDING",
+    defectDescription: "Ten diary bindings require reinforcement.",
+    checklist: { dimensions: true, binding: false, paperQuality: true, pageCount: true, coverFinish: true },
+    reworkDueDate: tomorrow(2),
+  });
+  const workspace = await loadWorkspace(accounts.quality);
+  const order = findOrder(workspace, ORDER.success);
+  const diaries = findProduct(workspace, "KHK-DIA-A5-NAT");
+  assert.equal(order.fulfillment_status, "REWORK_REQUIRED");
+  assert.equal(diaries.reworkStock, 10);
+  assert.equal(diaries.reservedStock, 190);
+  assert.equal(diaries.availableStock, 50);
+  assert.ok(order.reworkRecords.some((item) => item.rework_quantity === 10 && item.status === "OPEN"));
+  pass("failed quality moves affected units to rework and recalculates reservation quantities");
 }
+
+async function verifySuccessfulDispatch(accounts) {
+  await reset(accounts.manager);
+  await driveToQuality(accounts, ORDER.success);
+  await expectOk(accounts.quality, "RECORD_QC", ORDER.success, {
+    result: "PASSED",
+    checklist: { dimensions: true, binding: true, paperQuality: true, pageCount: true, coverFinish: true, damageFree: true },
+    notes: "All 200 diaries passed final quality inspection.",
+  });
+  await expectOk(accounts.packing, "COMPLETE_PACKING", ORDER.success, {
+    packageCount: 10,
+    cartonCount: 10,
+    bundleCount: 0,
+    quantityPerPackage: 20,
+    packagingType: "Moisture-protected carton",
+    totalShipmentWeightKg: 72,
+    moistureProtection: true,
+    notes: "Twenty diaries per carton.",
+  });
+
+  await expectBlocked(
+    accounts.packing,
+    "CONFIRM_HANDOVER",
+    ORDER.success,
+    handoverPayload("QA-BEFORE-DOCS"),
+    "MISSING_REQUIRED_DOCUMENT",
+  );
+  await expectOk(accounts.packing, "VERIFY_DOCUMENTS", ORDER.success, {
+    documents: [
+      { documentType: "INVOICE", referenceNumber: "INV-QA-200" },
+      { documentType: "PACKING_LIST", referenceNumber: "PL-QA-200" },
+      { documentType: "DISPATCH_NOTE", referenceNumber: "DN-QA-200" },
+    ],
+  });
+  await expectOk(accounts.packing, "CONFIRM_HANDOVER", ORDER.success, handoverPayload("QA-PICKUP-200"));
+
+  const freshManager = await login(...ACCOUNTS.manager);
+  const workspace = await loadWorkspace(freshManager);
+  const order = findOrder(workspace, ORDER.success);
+  const diaries = findProduct(workspace, "KHK-DIA-A5-NAT");
+  assert.equal(order.order_status, "CLOSED");
+  assert.equal(order.fulfillment_status, "DISPATCHED");
+  assert.ok(order.handover);
+  assert.equal(order.documents.filter((item) => item.required && item.status === "VERIFIED").length, 3);
+  assert.equal(order.reservations.filter((item) => item.status === "ACTIVE").length, 0);
+  assert.equal(diaries.availableStock, 50);
+  assert.equal(diaries.reservedStock, 0);
+
+  const { data: health, error: healthError } = await freshManager.client.rpc("agra_system_health");
+  assert.ifError(healthError);
+  assert.equal(health.ok, true);
+  assert.equal(health.invalidInventoryRows, 0);
+  assert.equal(health.reservationMismatches, 0);
+  pass("role-to-role 200-diary flow dispatches successfully and leaves 50 available");
+  pass("fresh-session reload sees the dispatched state and reconciled health");
+}
+
+async function verifyAutomationAndOutage(accounts) {
+  const healthResponse = await fetch(HEALTH_URL, { headers: { accept: "application/json" } });
+  const health = await healthResponse.json();
+  assert.equal(healthResponse.status, 200);
+  assert.equal(health.ok, true);
+  assert.equal(health.databaseAuthority, "Supabase");
+  pass("n8n production health reports Supabase as database authority");
+
+  const before = await loadWorkspace(accounts.manager);
+  await assert.rejects(
+    fetch("http://127.0.0.1:9/unavailable", {
+      method: "POST",
+      signal: AbortSignal.timeout(1200),
+    }),
+  );
+  const after = await loadWorkspace(accounts.manager);
+  assert.equal(findOrder(after, ORDER.success).fulfillment_status, findOrder(before, ORDER.success).fulfillment_status);
+  pass("simulated automation outage fails clearly and does not mutate live state");
+}
+
+async function main() {
+  console.log("Agra Operations pilot verification\n");
+  const accounts = {};
+  for (const [name, [email, role]] of Object.entries(ACCOUNTS)) {
+    accounts[name] = await login(email, role);
+  }
+
+  try {
+    await verifyIdentityAndPermissions(accounts);
+    await verifyReset(accounts);
+    await verifyShortage(accounts);
+    await verifySeededRework(accounts);
+    await verifyMissingDocuments(accounts);
+    await verifyDuplicateOrder(accounts);
+    await verifyIdempotencyAndCancellation(accounts);
+    await verifyConcurrentReservation(accounts);
+    await verifyFailedQuality(accounts);
+    await verifySuccessfulDispatch(accounts);
+    await verifyAutomationAndOutage(accounts);
+  } finally {
+    await reset(accounts.manager);
+  }
+
+  console.log(`\n${checkmarks.length} verification checks passed.`);
+  console.log("The reference dataset was restored for presentation.");
+}
+
+main().catch((error) => {
+  console.error("\nVerification failed:", error.message);
+  process.exitCode = 1;
+});

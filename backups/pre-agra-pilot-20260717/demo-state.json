@@ -1,0 +1,683 @@
+﻿{
+    "users":  [
+                  {
+                      "id":  "11111111-1111-1111-1111-111111111001",
+                      "name":  "Anita Karki",
+                      "role":  "DISPATCH_CLERK",
+                      "department":  "Dispatch Office"
+                  },
+                  {
+                      "id":  "11111111-1111-1111-1111-111111111002",
+                      "name":  "Ramesh Thapa",
+                      "role":  "WAREHOUSE_QUALITY",
+                      "department":  "Warehouse and Quality"
+                  },
+                  {
+                      "id":  "11111111-1111-1111-1111-111111111003",
+                      "name":  "Sanjay Gupta",
+                      "role":  "DISPATCH_SUPERVISOR",
+                      "department":  "Dispatch Control"
+                  },
+                  {
+                      "id":  "11111111-1111-1111-1111-111111111004",
+                      "name":  "Mina Tamang",
+                      "role":  "GATE_SECURITY",
+                      "department":  "Factory Gate"
+                  },
+                  {
+                      "id":  "11111111-1111-1111-1111-111111111005",
+                      "name":  "Prakash Adhikari",
+                      "role":  "MANAGER_ADMIN",
+                      "department":  "Operations Management"
+                  }
+              ],
+    "products":  [
+                     {
+                         "gsm":  120,
+                         "code":  "PR-120-KRAFT",
+                         "name":  "Kraft Liner Reel",
+                         "size":  "1450 mm reel",
+                         "unit":  "KG",
+                         "grade":  "KLB",
+                         "shade":  "Natural Brown",
+                         "productType":  "PAPER_REEL"
+                     },
+                     {
+                         "gsm":  180,
+                         "code":  "PR-180-WB",
+                         "name":  "White Board Reel",
+                         "size":  "1220 mm reel",
+                         "unit":  "KG",
+                         "grade":  "Duplex",
+                         "shade":  "White Back",
+                         "productType":  "PAPER_REEL"
+                     },
+                     {
+                         "gsm":  75,
+                         "code":  "SR-75-MAP",
+                         "name":  "Maplitho Sheet Ream",
+                         "size":  "A4 ream",
+                         "unit":  "REAM",
+                         "grade":  "Writing/Printing",
+                         "shade":  "Bright White",
+                         "productType":  "SHEET_REAM"
+                     },
+                     {
+                         "gsm":  90,
+                         "code":  "SR-90-LEDGER",
+                         "name":  "Ledger Sheet Ream",
+                         "size":  "Legal ream",
+                         "unit":  "REAM",
+                         "grade":  "Ledger",
+                         "shade":  "Creamwove",
+                         "productType":  "SHEET_REAM"
+                     }
+                 ],
+    "inventory":  [
+                      {
+                          "id":  "33333333-3333-3333-3333-333333333006",
+                          "gsm":  90,
+                          "size":  "Legal ream",
+                          "unit":  "REAM",
+                          "grade":  "Ledger",
+                          "shade":  "Creamwove",
+                          "batchNo":  "LED-26-0709-D",
+                          "location":  "Sheet Store S2",
+                          "onHandQty":  950,
+                          "producedOn":  "2026-07-09",
+                          "productCode":  "SR-90-LEDGER",
+                          "productName":  "Ledger Sheet Ream",
+                          "productType":  "SHEET_REAM",
+                          "reservedQty":  0,
+                          "qualityStatus":  "RELEASED"
+                      },
+                      {
+                          "id":  "33333333-3333-3333-3333-333333333004",
+                          "gsm":  75,
+                          "size":  "A4 ream",
+                          "unit":  "REAM",
+                          "grade":  "Writing/Printing",
+                          "shade":  "Bright White",
+                          "batchNo":  "MAP-26-0710-A",
+                          "location":  "Sheet Store S1",
+                          "onHandQty":  3200,
+                          "producedOn":  "2026-07-10",
+                          "productCode":  "SR-75-MAP",
+                          "productName":  "Maplitho Sheet Ream",
+                          "productType":  "SHEET_REAM",
+                          "reservedQty":  800,
+                          "qualityStatus":  "RELEASED"
+                      },
+                      {
+                          "id":  "33333333-3333-3333-3333-333333333001",
+                          "gsm":  120,
+                          "size":  "1450 mm reel",
+                          "unit":  "KG",
+                          "grade":  "KLB",
+                          "shade":  "Natural Brown",
+                          "batchNo":  "KLB-26-0715-A",
+                          "location":  "FG Reel Bay A1",
+                          "onHandQty":  13800,
+                          "producedOn":  "2026-07-12",
+                          "productCode":  "PR-120-KRAFT",
+                          "productName":  "Kraft Liner Reel",
+                          "productType":  "PAPER_REEL",
+                          "reservedQty":  0,
+                          "qualityStatus":  "RELEASED"
+                      },
+                      {
+                          "id":  "33333333-3333-3333-3333-333333333003",
+                          "gsm":  180,
+                          "size":  "1220 mm reel",
+                          "unit":  "KG",
+                          "grade":  "Duplex",
+                          "shade":  "White Back",
+                          "batchNo":  "DUP-26-0713-C",
+                          "location":  "FG Reel Bay B3",
+                          "onHandQty":  11800,
+                          "producedOn":  "2026-07-13",
+                          "productCode":  "PR-180-WB",
+                          "productName":  "White Board Reel",
+                          "productType":  "PAPER_REEL",
+                          "reservedQty":  5000,
+                          "qualityStatus":  "RELEASED"
+                      },
+                      {
+                          "id":  "33333333-3333-3333-3333-333333333002",
+                          "gsm":  120,
+                          "size":  "1450 mm reel",
+                          "unit":  "KG",
+                          "grade":  "KLB",
+                          "shade":  "Natural Brown",
+                          "batchNo":  "KLB-26-0714-B",
+                          "location":  "Quality Hold Q2",
+                          "onHandQty":  5600,
+                          "producedOn":  "2026-07-14",
+                          "productCode":  "PR-120-KRAFT",
+                          "productName":  "Kraft Liner Reel",
+                          "productType":  "PAPER_REEL",
+                          "reservedQty":  0,
+                          "qualityStatus":  "BLOCKED"
+                      },
+                      {
+                          "id":  "33333333-3333-3333-3333-333333333005",
+                          "gsm":  75,
+                          "size":  "A4 ream",
+                          "unit":  "REAM",
+                          "grade":  "Writing/Printing",
+                          "shade":  "Bright White",
+                          "batchNo":  "MAP-26-0715-H",
+                          "location":  "Inspection Queue IQ1",
+                          "onHandQty":  1400,
+                          "producedOn":  "2026-07-15",
+                          "productCode":  "SR-75-MAP",
+                          "productName":  "Maplitho Sheet Ream",
+                          "productType":  "SHEET_REAM",
+                          "reservedQty":  0,
+                          "qualityStatus":  "PENDING_INSPECTION"
+                      }
+                  ],
+    "dispatches":  [
+                       {
+                           "id":  "44444444-4444-4444-4444-444444444006",
+                           "audit":  [
+                                         {
+                                             "at":  "2026-07-15T04:30:00+00:00",
+                                             "id":  "99999999-9999-9999-9999-999999999009",
+                                             "note":  "Released stock available. Awaiting dispatch supervisor approval.",
+                                             "role":  "DISPATCH_CLERK",
+                                             "actor":  "Anita Karki",
+                                             "action":  "SUBMITTED",
+                                             "toStatus":  "AWAITING_APPROVAL",
+                                             "dispatchId":  "44444444-4444-4444-4444-444444444006",
+                                             "fromStatus":  "DRAFT"
+                                         }
+                                     ],
+                           "lines":  [
+                                         {
+                                             "id":  "55555555-5555-5555-5555-555555555006",
+                                             "unit":  "KG",
+                                             "productCode":  "PR-180-WB",
+                                             "productName":  "White Board Reel",
+                                             "productType":  "PAPER_REEL",
+                                             "requestedQty":  2800,
+                                             "reservedBatchIds":  [
+
+                                                                  ]
+                                         }
+                                     ],
+                           "status":  "AWAITING_APPROVAL",
+                           "vehicle":  null,
+                           "priority":  "NORMAL",
+                           "createdAt":  "2026-07-15T04:30:00+00:00",
+                           "createdBy":  "Anita Karki",
+                           "documents":  [
+                                             {
+                                                 "type":  "COMMERCIAL_INVOICE",
+                                                 "present":  true,
+                                                 "verified":  false
+                                             },
+                                             {
+                                                 "type":  "DELIVERY_CHALLAN",
+                                                 "present":  true,
+                                                 "verified":  false
+                                             },
+                                             {
+                                                 "type":  "GATE_PASS",
+                                                 "present":  true,
+                                                 "verified":  false
+                                             },
+                                             {
+                                                 "type":  "PACKING_LIST",
+                                                 "present":  true,
+                                                 "verified":  false
+                                             }
+                                         ],
+                           "requestNo":  "FGD-2026-0715-006",
+                           "approvedBy":  null,
+                           "exceptions":  [
+
+                                          ],
+                           "destination":  "Butwal, Nepal",
+                           "customerName":  "Lumbini Box Industries",
+                           "customerType":  "COMMERCIAL",
+                           "controlStatus":  "CLEAR",
+                           "actualWeightKg":  null,
+                           "expectedWeightKg":  2800,
+                           "requestedDispatchDate":  "2026-07-16",
+                           "weightTolerancePercent":  1.5
+                       },
+                       {
+                           "id":  "44444444-4444-4444-4444-444444444003",
+                           "audit":  [
+                                         {
+                                             "at":  "2026-07-15T03:40:00+00:00",
+                                             "id":  "99999999-9999-9999-9999-999999999006",
+                                             "note":  "Requested batch is on quality hold.",
+                                             "role":  "WAREHOUSE_QUALITY",
+                                             "actor":  "Ramesh Thapa",
+                                             "action":  "QUALITY_BLOCK",
+                                             "toStatus":  "REJECTED",
+                                             "dispatchId":  "44444444-4444-4444-4444-444444444003",
+                                             "fromStatus":  null
+                                         }
+                                     ],
+                           "lines":  [
+                                         {
+                                             "id":  "55555555-5555-5555-5555-555555555003",
+                                             "unit":  "KG",
+                                             "productCode":  "PR-120-KRAFT",
+                                             "productName":  "Kraft Liner Reel",
+                                             "productType":  "PAPER_REEL",
+                                             "requestedQty":  5200,
+                                             "reservedBatchIds":  [
+
+                                                                  ]
+                                         }
+                                     ],
+                           "status":  "REJECTED",
+                           "vehicle":  null,
+                           "priority":  "NORMAL",
+                           "createdAt":  "2026-07-15T03:40:00+00:00",
+                           "createdBy":  "Anita Karki",
+                           "documents":  [
+                                             {
+                                                 "type":  "COMMERCIAL_INVOICE",
+                                                 "present":  true,
+                                                 "verified":  false
+                                             },
+                                             {
+                                                 "type":  "DELIVERY_CHALLAN",
+                                                 "present":  true,
+                                                 "verified":  false
+                                             },
+                                             {
+                                                 "type":  "GATE_PASS",
+                                                 "present":  true,
+                                                 "verified":  false
+                                             },
+                                             {
+                                                 "type":  "PACKING_LIST",
+                                                 "present":  true,
+                                                 "verified":  false
+                                             }
+                                         ],
+                           "requestNo":  "FGD-2026-0715-003",
+                           "approvedBy":  null,
+                           "exceptions":  [
+                                              {
+                                                  "id":  "88888888-8888-8888-8888-888888888003",
+                                                  "code":  "QUALITY_BLOCKED_BATCH",
+                                                  "message":  "Batch KLB-26-0714-B is quality blocked and cannot be dispatched.",
+                                                  "severity":  "HIGH",
+                                                  "createdAt":  "2026-07-15T03:40:00+00:00",
+                                                  "dispatchId":  "44444444-4444-4444-4444-444444444003",
+                                                  "resolvedAt":  null,
+                                                  "controlStatus":  "BLOCKED"
+                                              }
+                                          ],
+                           "destination":  "Bhairahawa, Nepal",
+                           "customerName":  "Eastern Corrugators Pvt. Ltd.",
+                           "customerType":  "COMMERCIAL",
+                           "controlStatus":  "BLOCKED",
+                           "actualWeightKg":  null,
+                           "expectedWeightKg":  5200,
+                           "requestedDispatchDate":  "2026-07-16",
+                           "weightTolerancePercent":  1.5
+                       },
+                       {
+                           "id":  "44444444-4444-4444-4444-444444444002",
+                           "audit":  [
+                                         {
+                                             "at":  "2026-07-15T03:15:00+00:00",
+                                             "id":  "99999999-9999-9999-9999-999999999004",
+                                             "note":  "Urgent wholesale dispatch entered.",
+                                             "role":  "DISPATCH_CLERK",
+                                             "actor":  "Anita Karki",
+                                             "action":  "CREATED",
+                                             "toStatus":  "DRAFT",
+                                             "dispatchId":  "44444444-4444-4444-4444-444444444002",
+                                             "fromStatus":  null
+                                         },
+                                         {
+                                             "at":  "2026-07-15T03:19:00+00:00",
+                                             "id":  "99999999-9999-9999-9999-999999999005",
+                                             "note":  "Insufficient released stock blocked approval.",
+                                             "role":  "MANAGER_ADMIN",
+                                             "actor":  "System Control",
+                                             "action":  "VALIDATION_REJECTED",
+                                             "toStatus":  "REJECTED",
+                                             "dispatchId":  "44444444-4444-4444-4444-444444444002",
+                                             "fromStatus":  "DRAFT"
+                                         }
+                                     ],
+                           "lines":  [
+                                         {
+                                             "id":  "55555555-5555-5555-5555-555555555002",
+                                             "unit":  "REAM",
+                                             "productCode":  "SR-90-LEDGER",
+                                             "productName":  "Ledger Sheet Ream",
+                                             "productType":  "SHEET_REAM",
+                                             "requestedQty":  1400,
+                                             "reservedBatchIds":  [
+
+                                                                  ]
+                                         }
+                                     ],
+                           "status":  "REJECTED",
+                           "vehicle":  null,
+                           "priority":  "URGENT",
+                           "createdAt":  "2026-07-15T03:15:00+00:00",
+                           "createdBy":  "Anita Karki",
+                           "documents":  [
+                                             {
+                                                 "type":  "COMMERCIAL_INVOICE",
+                                                 "present":  true,
+                                                 "verified":  false
+                                             },
+                                             {
+                                                 "type":  "DELIVERY_CHALLAN",
+                                                 "present":  true,
+                                                 "verified":  false
+                                             },
+                                             {
+                                                 "type":  "GATE_PASS",
+                                                 "present":  true,
+                                                 "verified":  false
+                                             },
+                                             {
+                                                 "type":  "PACKING_LIST",
+                                                 "present":  true,
+                                                 "verified":  false
+                                             }
+                                         ],
+                           "requestNo":  "FGD-2026-0715-002",
+                           "approvedBy":  null,
+                           "exceptions":  [
+                                              {
+                                                  "id":  "88888888-8888-8888-8888-888888888002",
+                                                  "code":  "INSUFFICIENT_RELEASED_STOCK",
+                                                  "message":  "Requested 1,400 REAM, but only 950 REAM released stock is available.",
+                                                  "severity":  "HIGH",
+                                                  "createdAt":  "2026-07-15T03:19:00+00:00",
+                                                  "dispatchId":  "44444444-4444-4444-4444-444444444002",
+                                                  "resolvedAt":  null,
+                                                  "controlStatus":  "BLOCKED"
+                                              }
+                                          ],
+                           "destination":  "Patna, India",
+                           "customerName":  "Ganga Paper Wholesalers",
+                           "customerType":  "WHOLESALER",
+                           "controlStatus":  "BLOCKED",
+                           "actualWeightKg":  null,
+                           "expectedWeightKg":  0,
+                           "requestedDispatchDate":  "2026-07-15",
+                           "weightTolerancePercent":  1.5
+                       },
+                       {
+                           "id":  "44444444-4444-4444-4444-444444444005",
+                           "audit":  [
+                                         {
+                                             "at":  "2026-07-15T07:45:00+00:00",
+                                             "id":  "99999999-9999-9999-9999-999999999008",
+                                             "note":  "Packing list not attached.",
+                                             "role":  "DISPATCH_SUPERVISOR",
+                                             "actor":  "Sanjay Gupta",
+                                             "action":  "DOCUMENT_CHECK_BLOCKED",
+                                             "toStatus":  "AWAITING_DOCUMENT_CHECK",
+                                             "dispatchId":  "44444444-4444-4444-4444-444444444005",
+                                             "fromStatus":  "AWAITING_WEIGHT_CHECK"
+                                         }
+                                     ],
+                           "lines":  [
+                                         {
+                                             "id":  "55555555-5555-5555-5555-555555555005",
+                                             "unit":  "REAM",
+                                             "productCode":  "SR-75-MAP",
+                                             "productName":  "Maplitho Sheet Ream",
+                                             "productType":  "SHEET_REAM",
+                                             "requestedQty":  800,
+                                             "reservedBatchIds":  [
+                                                                      "33333333-3333-3333-3333-333333333004"
+                                                                  ]
+                                         }
+                                     ],
+                           "status":  "AWAITING_DOCUMENT_CHECK",
+                           "vehicle":  {
+                                           "vehicleNo":  "Pra 2-03-001 Kha 8842",
+                                           "driverName":  "Ajay Sah",
+                                           "driverPhone":  "9844448877",
+                                           "transporter":  "Madhesh Carrier",
+                                           "expectedArrival":  "2026-07-15T07:15:00+00:00"
+                                       },
+                           "priority":  "NORMAL",
+                           "createdAt":  "2026-07-15T02:55:00+00:00",
+                           "createdBy":  "Anita Karki",
+                           "documents":  [
+                                             {
+                                                 "type":  "COMMERCIAL_INVOICE",
+                                                 "present":  true,
+                                                 "verified":  true
+                                             },
+                                             {
+                                                 "type":  "DELIVERY_CHALLAN",
+                                                 "present":  true,
+                                                 "verified":  true
+                                             },
+                                             {
+                                                 "type":  "GATE_PASS",
+                                                 "present":  true,
+                                                 "verified":  false
+                                             },
+                                             {
+                                                 "type":  "PACKING_LIST",
+                                                 "present":  false,
+                                                 "verified":  false
+                                             }
+                                         ],
+                           "requestNo":  "FGD-2026-0715-005",
+                           "approvedBy":  "Sanjay Gupta",
+                           "exceptions":  [
+                                              {
+                                                  "id":  "88888888-8888-8888-8888-888888888005",
+                                                  "code":  "MISSING_DOCUMENT",
+                                                  "message":  "Packing list is missing; gate clearance is blocked.",
+                                                  "severity":  "HIGH",
+                                                  "createdAt":  "2026-07-15T07:45:00+00:00",
+                                                  "dispatchId":  "44444444-4444-4444-4444-444444444005",
+                                                  "resolvedAt":  null,
+                                                  "controlStatus":  "BLOCKED"
+                                              }
+                                          ],
+                           "destination":  "Janakpur, Nepal",
+                           "customerName":  "Janakpur Stationery Traders",
+                           "customerType":  "DISTRIBUTOR",
+                           "controlStatus":  "BLOCKED",
+                           "actualWeightKg":  null,
+                           "expectedWeightKg":  0,
+                           "requestedDispatchDate":  "2026-07-15",
+                           "weightTolerancePercent":  1.5
+                       },
+                       {
+                           "id":  "44444444-4444-4444-4444-444444444001",
+                           "audit":  [
+                                         {
+                                             "at":  "2026-07-15T02:25:00+00:00",
+                                             "id":  "99999999-9999-9999-9999-999999999001",
+                                             "note":  "Dispatch request created from approved customer order.",
+                                             "role":  "DISPATCH_CLERK",
+                                             "actor":  "Anita Karki",
+                                             "action":  "CREATED",
+                                             "toStatus":  "DRAFT",
+                                             "dispatchId":  "44444444-4444-4444-4444-444444444001",
+                                             "fromStatus":  null
+                                         },
+                                         {
+                                             "at":  "2026-07-15T03:35:00+00:00",
+                                             "id":  "99999999-9999-9999-9999-999999999002",
+                                             "note":  "Released inventory reserved from batch KLB-26-0715-A.",
+                                             "role":  "DISPATCH_SUPERVISOR",
+                                             "actor":  "Sanjay Gupta",
+                                             "action":  "APPROVED_AND_RESERVED",
+                                             "toStatus":  "APPROVED",
+                                             "dispatchId":  "44444444-4444-4444-4444-444444444001",
+                                             "fromStatus":  "AWAITING_APPROVAL"
+                                         },
+                                         {
+                                             "at":  "2026-07-15T06:55:00+00:00",
+                                             "id":  "99999999-9999-9999-9999-999999999003",
+                                             "note":  "Vehicle exited gate; inventory deducted.",
+                                             "role":  "GATE_SECURITY",
+                                             "actor":  "Mina Tamang",
+                                             "action":  "EXIT_CONFIRMED",
+                                             "toStatus":  "DISPATCHED",
+                                             "dispatchId":  "44444444-4444-4444-4444-444444444001",
+                                             "fromStatus":  "CLEARED_FOR_EXIT"
+                                         }
+                                     ],
+                           "lines":  [
+                                         {
+                                             "id":  "55555555-5555-5555-5555-555555555001",
+                                             "unit":  "KG",
+                                             "productCode":  "PR-120-KRAFT",
+                                             "productName":  "Kraft Liner Reel",
+                                             "productType":  "PAPER_REEL",
+                                             "requestedQty":  4200,
+                                             "reservedBatchIds":  [
+
+                                                                  ]
+                                         }
+                                     ],
+                           "status":  "DISPATCHED",
+                           "vehicle":  {
+                                           "vehicleNo":  "Na 7 Kha 4481",
+                                           "driverName":  "Bikash Yadav",
+                                           "driverPhone":  "9800000145",
+                                           "transporter":  "Bishal Transport Service",
+                                           "expectedArrival":  "2026-07-15T04:15:00+00:00"
+                                       },
+                           "priority":  "NORMAL",
+                           "createdAt":  "2026-07-15T02:25:00+00:00",
+                           "createdBy":  "Anita Karki",
+                           "documents":  [
+                                             {
+                                                 "type":  "COMMERCIAL_INVOICE",
+                                                 "present":  true,
+                                                 "verified":  true
+                                             },
+                                             {
+                                                 "type":  "DELIVERY_CHALLAN",
+                                                 "present":  true,
+                                                 "verified":  true
+                                             },
+                                             {
+                                                 "type":  "GATE_PASS",
+                                                 "present":  true,
+                                                 "verified":  true
+                                             },
+                                             {
+                                                 "type":  "PACKING_LIST",
+                                                 "present":  true,
+                                                 "verified":  true
+                                             }
+                                         ],
+                           "requestNo":  "FGD-2026-0715-001",
+                           "approvedBy":  "Sanjay Gupta",
+                           "exceptions":  [
+
+                                          ],
+                           "destination":  "Birgunj, Nepal",
+                           "customerName":  "Himalayan Packaging Distributors",
+                           "customerType":  "DISTRIBUTOR",
+                           "controlStatus":  "CLEAR",
+                           "actualWeightKg":  4245,
+                           "expectedWeightKg":  4200,
+                           "requestedDispatchDate":  "2026-07-15",
+                           "weightTolerancePercent":  1.5
+                       },
+                       {
+                           "id":  "44444444-4444-4444-4444-444444444004",
+                           "audit":  [
+                                         {
+                                             "at":  "2026-07-15T06:25:00+00:00",
+                                             "id":  "99999999-9999-9999-9999-999999999007",
+                                             "note":  "Weight variance requires supervisor review before document check.",
+                                             "role":  "WAREHOUSE_QUALITY",
+                                             "actor":  "Ramesh Thapa",
+                                             "action":  "WEIGHT_CHECK_BLOCKED",
+                                             "toStatus":  "AWAITING_WEIGHT_CHECK",
+                                             "dispatchId":  "44444444-4444-4444-4444-444444444004",
+                                             "fromStatus":  "LOADING"
+                                         }
+                                     ],
+                           "lines":  [
+                                         {
+                                             "id":  "55555555-5555-5555-5555-555555555004",
+                                             "unit":  "KG",
+                                             "productCode":  "PR-180-WB",
+                                             "productName":  "White Board Reel",
+                                             "productType":  "PAPER_REEL",
+                                             "requestedQty":  5000,
+                                             "reservedBatchIds":  [
+                                                                      "33333333-3333-3333-3333-333333333003"
+                                                                  ]
+                                         }
+                                     ],
+                           "status":  "AWAITING_WEIGHT_CHECK",
+                           "vehicle":  {
+                                           "vehicleNo":  "Ba 5 Kha 2390",
+                                           "driverName":  "Suman Rai",
+                                           "driverPhone":  "9811112233",
+                                           "transporter":  "Sagarmatha Logistics",
+                                           "expectedArrival":  "2026-07-15T05:45:00+00:00"
+                                       },
+                           "priority":  "NORMAL",
+                           "createdAt":  "2026-07-15T01:50:00+00:00",
+                           "createdBy":  "Anita Karki",
+                           "documents":  [
+                                             {
+                                                 "type":  "COMMERCIAL_INVOICE",
+                                                 "present":  true,
+                                                 "verified":  true
+                                             },
+                                             {
+                                                 "type":  "DELIVERY_CHALLAN",
+                                                 "present":  true,
+                                                 "verified":  true
+                                             },
+                                             {
+                                                 "type":  "GATE_PASS",
+                                                 "present":  true,
+                                                 "verified":  true
+                                             },
+                                             {
+                                                 "type":  "PACKING_LIST",
+                                                 "present":  true,
+                                                 "verified":  true
+                                             }
+                                         ],
+                           "requestNo":  "FGD-2026-0715-004",
+                           "approvedBy":  "Sanjay Gupta",
+                           "exceptions":  [
+                                              {
+                                                  "id":  "88888888-8888-8888-8888-888888888004",
+                                                  "code":  "WEIGHT_VARIANCE_EXCEEDED",
+                                                  "message":  "Actual weight variance is 2.52%, above the approved 1.5% tolerance.",
+                                                  "severity":  "HIGH",
+                                                  "createdAt":  "2026-07-15T06:25:00+00:00",
+                                                  "dispatchId":  "44444444-4444-4444-4444-444444444004",
+                                                  "resolvedAt":  null,
+                                                  "controlStatus":  "BLOCKED"
+                                              }
+                                          ],
+                           "destination":  "Kathmandu, Nepal",
+                           "customerName":  "Kathmandu Print \u0026 Pack",
+                           "customerType":  "COMMERCIAL",
+                           "controlStatus":  "BLOCKED",
+                           "actualWeightKg":  5126,
+                           "expectedWeightKg":  5000,
+                           "requestedDispatchDate":  "2026-07-15",
+                           "weightTolerancePercent":  1.5
+                       }
+                   ]
+}

@@ -1,0 +1,61 @@
+{
+  "name": "Agra - Operations Health",
+  "active": false,
+  "nodes": [
+    {
+      "id": "079a08d3-a891-4020-811c-580359ee130b",
+      "name": "Health Check",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        240,
+        300
+      ],
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "agra-operations-health",
+        "authentication": "none",
+        "responseMode": "lastNode",
+        "responseData": "firstEntryJson",
+        "options": {
+          "allowedOrigins": "*"
+        }
+      },
+      "webhookId": "b4760a51-836a-49b2-ab8c-66172fe80ffa"
+    },
+    {
+      "id": "f7e73ea1-310a-4ad8-b617-d6945755c949",
+      "name": "Build Health Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        520,
+        300
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "return [{ json: {\n  ok: true,\n  service: 'Agra Operations Orchestrator',\n  status: 'CONNECTED',\n  policyVersion: '2026-07-17.agra-operations.v1',\n  environment: 'DEMO',\n  databaseAuthority: 'Supabase',\n  checkedAt: new Date().toISOString()\n} }];"
+      }
+    }
+  ],
+  "connections": {
+    "Health Check": {
+      "main": [
+        [
+          {
+            "node": "Build Health Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": true
+  },
+  "tags": []
+}
