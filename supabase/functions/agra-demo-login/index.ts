@@ -2,7 +2,9 @@ import { createClient } from "npm:@supabase/supabase-js@2.110.4";
 
 const ALLOWED_ORIGINS = new Set([
   "https://paper-industry-dispatch-control.trafangularlaw01.chatgpt.site",
+  "http://127.0.0.1:3000",
   "http://127.0.0.1:3101",
+  "http://localhost:3000",
   "http://localhost:3101",
 ]);
 

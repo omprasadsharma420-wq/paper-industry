@@ -8,6 +8,8 @@
     "build": "node scripts/build-sites.mjs",
     "start": "vinext start",
     "lint": "eslint",
+    "qa:baseline": "node scripts/qa-export-baseline.mjs",
+    "test:e2e": "playwright test",
     "test:unit": "node --test --experimental-strip-types tests/*.test.mjs",
     "verify:demo": "node scripts/verify-demo.mjs"
   },
@@ -20,6 +22,7 @@
     "react-dom": "19.2.7"
   },
   "devDependencies": {
+    "@playwright/test": "1.61.1",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
