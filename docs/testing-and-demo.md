@@ -43,7 +43,7 @@ The finalizer always restores the reference dataset.
 Use `AGRA-DEMO-001` for the successful guided flow:
 
 1. Sales submits 200 A5 KhoriyaCo handmade diaries.
-2. Stock & Quality checks 250 released diaries.
+2. Inventory & Quality confirms released stock.
 3. Supervisor approves and reserves 200.
 4. Packing picks 200.
 5. Quality passes the diary checklist.
@@ -52,6 +52,10 @@ Use `AGRA-DEMO-001` for the successful guided flow:
 8. Packing confirms handover.
 9. The order closes as Dispatched.
 10. Stock shows 50 available and zero reserved.
+
+Role navigation uses **My Work**, **Orders**, **Products**, **Inventory**, **Quality**, **Packing & Dispatch**, **Exceptions**, **Reports**, and **Administration**. There are no passwords in the reference pilot; choose the role on the sign-in screen.
+
+Operational note: before presenting, confirm the n8n health check returns `ok: true`. The connected n8n account currently reports an execution quota limit; clear old executions or upgrade the plan before relying on live actions.
 
 Useful prepared failures:
 

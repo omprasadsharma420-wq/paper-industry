@@ -15,6 +15,7 @@ export type ViewKey =
   | "dispatch"
   | "issues"
   | "reports"
+  | "admin"
   | "team"
   | "system";
 

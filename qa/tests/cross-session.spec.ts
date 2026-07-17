@@ -25,7 +25,7 @@ test.describe.serial("cross-session operational freshness", () => {
     await salesPage.getByRole("navigation", { name: "Main navigation" }).getByRole("button", { name: "Orders" }).click();
     await salesPage.getByRole("button", { name: /AGRA-DEMO-001/ }).click();
     const action = await captureAction(salesPage, async () => {
-      await salesPage.getByRole("button", { name: /Send for stock check/ }).click();
+      await salesPage.getByRole("button", { name: /Submit for stock check/ }).click();
     });
     expect(action.response.ok).toBe(true);
     if (process.env.N8N_MCP_ACCESS_TOKEN) {

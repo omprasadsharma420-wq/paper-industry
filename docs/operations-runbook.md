@@ -11,7 +11,7 @@
 
 ## Health
 
-Managers open **System** and run the live check. Healthy values are:
+Managers open **Administration** and run the live check. Healthy values are:
 
 - Supabase connected
 - n8n connected
@@ -20,14 +20,14 @@ Managers open **System** and run the live check. Healthy values are:
 - Active users: `5`
 - Environment: `DEMO`
 
-The public n8n health endpoint must return `ok: true` and `databaseAuthority: Supabase`.
+The public n8n health endpoint must return `ok: true` and `databaseAuthority: Supabase`. If it returns `Execution limit reached`, delete old n8n execution history or upgrade the n8n plan before testing actions. Do not present a live write flow while this condition remains.
 
 ## Reset
 
 Only the Manager role can reset the reference dataset.
 
 1. Select **Manager** on the role screen.
-2. Open **System**.
+2. Open **Administration**.
 3. Select **Reset demo**.
 4. Confirm the dialog.
 5. Verify five orders and 250 available diaries.

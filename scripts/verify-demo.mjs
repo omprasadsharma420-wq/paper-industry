@@ -84,7 +84,13 @@ async function callAction(account, action, orderId = null, payload = {}, request
     },
     body: JSON.stringify({ requestId, action, orderId, payload }),
   });
-  const body = await response.json();
+  const rawBody = await response.text();
+  let body;
+  try {
+    body = JSON.parse(rawBody);
+  } catch {
+    throw new Error(`${action} returned a non-JSON response (HTTP ${response.status}): ${rawBody.slice(0, 240) || "<empty body>"}`);
+  }
   assert.equal(response.status, 200, `${action} returned HTTP ${response.status}`);
   return { ...body, requestId };
 }

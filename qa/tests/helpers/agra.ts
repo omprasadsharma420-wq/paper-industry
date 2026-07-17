@@ -20,11 +20,11 @@ export const ROLE_EMAILS = {
 } as const;
 
 export const ROLE_HEADLINES = {
-  Manager: "Operations at a glance",
-  Sales: "Orders waiting for you",
-  "Stock & quality": "Stock and quality work",
-  Packing: "Packing and handover work",
-  Supervisor: "Approvals and issues",
+  Manager: "Management overview",
+  Sales: "Sales work queue",
+  "Stock & quality": "Inventory & quality queue",
+  Packing: "Fulfilment queue",
+  Supervisor: "Supervisor control centre",
 } as const;
 
 export type RoleLabel = keyof typeof ROLE_EMAILS;

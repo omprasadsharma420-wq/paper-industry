@@ -1,5 +1,7 @@
 # Agra Operations Independent QA Release Report
 
+> **Current redesign addendum, 17 July 2026:** The role-first redesign is implemented on branch `codex/role-first-operations-redesign` and passes TypeScript, ESLint, unit rules, role navigation, responsive overflow, logout, customer-reference search, and five role evidence captures. Deployment is intentionally held because the connected n8n account has reached its execution quota. n8n workflow inspection confirms the health and action workflows are active, but the latest execution error is `Execution limit reached`; the public health endpoint currently returns `Error in workflow` and action calls can return an empty HTTP 200 body. Clear n8n executions or upgrade the plan, then rerun `pnpm run verify:demo` and the dynamic Playwright flows before publishing this branch.
+
 Date: 2026-07-17
 QA branch: `codex/independent-qa-hardening`
 Baseline production commit: `edf9e5f0975c3686a4963495d4415107f11015c6`

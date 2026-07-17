@@ -86,3 +86,37 @@ textarea:focus-visible {
     backdrop-filter: none !important;
   }
 }
+
+@media print {
+  @page {
+    margin: 14mm;
+  }
+
+  body {
+    background: #fff !important;
+  }
+
+  aside,
+  header,
+  .print\:hidden,
+  button {
+    display: none !important;
+  }
+
+  .lg\:pl-\[248px\] {
+    padding-left: 0 !important;
+  }
+
+  main {
+    max-width: none !important;
+    padding: 0 !important;
+  }
+
+  .order-print-view {
+    color: #000;
+  }
+
+  .order-print-view table {
+    width: 100%;
+  }
+}

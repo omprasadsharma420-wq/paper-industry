@@ -2,11 +2,11 @@ import { expect, test } from "@playwright/test";
 import { observePage, openRole, type RoleLabel } from "./helpers/agra";
 
 const roleNavigation: Array<[RoleLabel, string[], string[]]> = [
-  ["Sales", ["Home", "Orders", "Customers", "Products"], ["Stock", "Quality", "Pack & send", "Issues", "Reports", "Team", "System"]],
-  ["Stock & quality", ["Home", "Stock", "Quality", "Orders", "Products"], ["Customers", "Pack & send", "Issues", "Reports", "Team", "System"]],
-  ["Packing", ["Home", "Pack & send", "Orders", "Stock"], ["Customers", "Products", "Quality", "Issues", "Reports", "Team", "System"]],
-  ["Supervisor", ["Home", "Orders", "Issues", "Reports"], ["Customers", "Products", "Stock", "Quality", "Pack & send", "Team", "System"]],
-  ["Manager", ["Home", "Orders", "Stock", "Quality", "Pack & send", "Issues", "Reports", "Team", "System"], ["Customers", "Products"]],
+  ["Sales", ["My Work", "Orders", "Customers", "Products"], ["Inventory", "Quality", "Packing & Dispatch", "Exceptions", "Reports", "Administration"]],
+  ["Stock & quality", ["My Work", "Products", "Inventory", "Quality", "Orders"], ["Customers", "Packing & Dispatch", "Exceptions", "Reports", "Administration"]],
+  ["Packing", ["My Work", "Packing & Dispatch", "Orders", "Inventory"], ["Customers", "Products", "Quality", "Exceptions", "Reports", "Administration"]],
+  ["Supervisor", ["My Work", "Orders", "Exceptions"], ["Customers", "Products", "Inventory", "Quality", "Packing & Dispatch", "Reports", "Administration"]],
+  ["Manager", ["My Work", "Orders", "Products", "Inventory", "Reports", "Administration"], ["Customers", "Quality", "Packing & Dispatch", "Exceptions"]],
 ];
 
 for (const [role, permitted, prohibited] of roleNavigation) {
@@ -54,6 +54,6 @@ for (const viewport of [
 test("order search includes customer order reference", async ({ page }) => {
   await openRole(page, "Sales");
   await page.getByRole("navigation", { name: "Main navigation" }).getByRole("button", { name: "Orders" }).click();
-  await page.getByPlaceholder("Search orders").fill("KEG-PO-200");
+  await page.getByPlaceholder(/Search order, customer/).fill("KEG-PO-200");
   await expect(page.getByRole("button", { name: /AGRA-DEMO-001/ })).toBeVisible();
 });

@@ -1,7 +1,6 @@
 import { expect, test } from "@playwright/test";
 import {
   callAction,
-  captureAction,
   loadWorkspace,
   observePage,
   openApiSession,
@@ -41,15 +40,17 @@ test.describe.serial("diary quality control", () => {
     await openRole(page, "Stock & quality");
     await page.getByRole("navigation", { name: "Main navigation" }).getByRole("button", { name: "Orders" }).click();
     await page.getByRole("button", { name: /AGRA-DEMO-001/ }).click();
-    await page.getByRole("button", { name: "Record quality check" }).click();
+    await page.getByRole("button", { name: "Complete quality check" }).click();
+    await page.getByLabel(/^Result/).selectOption("PASSED");
+    await page.getByRole("button", { name: /^Next/ }).click();
 
     for (const item of [
-      "Correct page count",
-      "Dimensions correct",
-      "Binding secure",
-      "Cover correct",
-      "Branding correct",
-      "Pages clean",
+      "Page count is correct",
+      "Dimensions are correct",
+      "Binding is secure",
+      "Cover is correct",
+      "Branding is correct",
+      "Pages are clean",
       "No torn pages",
     ]) {
       await expect(page.getByRole("checkbox", { name: item })).toBeVisible();
@@ -72,15 +73,17 @@ test.describe.serial("diary quality control", () => {
     await openRole(page, "Stock & quality");
     await page.getByRole("navigation", { name: "Main navigation" }).getByRole("button", { name: "Orders" }).click();
     await page.getByRole("button", { name: /AGRA-DEMO-001/ }).click();
-    await page.getByRole("button", { name: "Finish rework" }).click();
+    await page.getByRole("button", { name: "Complete rework" }).click();
     const dialog = page.getByRole("dialog", { name: "Finish rework" });
-    await expect(dialog.getByLabel(/Corrected and released/)).toHaveValue("50");
-    await dialog.getByLabel(/Corrected and released/).fill("45");
-    await dialog.getByLabel(/Damaged/).fill("5");
-    await dialog.getByLabel(/Blocked/).fill("0");
+    await expect(dialog.getByLabel(/Released quantity/)).toHaveValue("50");
+    await dialog.getByLabel(/Released quantity/).fill("45");
+    await dialog.getByLabel(/Damaged quantity/).fill("5");
+    await dialog.getByLabel(/Blocked quantity/).fill("0");
+    await dialog.getByRole("button", { name: /^Next/ }).click();
     await dialog.getByLabel(/Completion note/).fill("Forty-five corrected; five rejected.");
-    const completed = await captureAction(page, () => dialog.getByRole("button", { name: "Save" }).click());
-    expect(completed.response.ok, completed.response.message).toBe(true);
+    await expect(dialog.getByRole("button", { name: "Save reinspection" })).toBeVisible();
+    await dialog.getByRole("button", { name: "Save reinspection" }).click();
+    await expect(dialog).toHaveCount(0, { timeout: 30_000 });
 
     const workspace = await loadWorkspace(qualityApi);
     const order = workspace.orders.find((item: { id: string }) => item.id === DEMO_ORDER_ID);
