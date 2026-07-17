@@ -15,6 +15,10 @@ export const N8N_HEALTH_URL =
   process.env.NEXT_PUBLIC_N8N_HEALTH_URL ??
   "https://om420.app.n8n.cloud/webhook/agra-operations-health";
 
+export const DEMO_LOGIN_URL =
+  process.env.NEXT_PUBLIC_DEMO_LOGIN_URL ??
+  "https://etykyasaicfhrbbtbdfv.supabase.co/functions/v1/agra-demo-login";
+
 function requireSupabase() {
   if (!supabase) {
     throw new Error("Supabase is not configured for this build.");
@@ -30,7 +34,7 @@ type DemoSessionResponse = {
 
 export async function signInDemo(email: string) {
   const client = requireSupabase();
-  const response = await fetch("/api/demo-login", {
+  const response = await fetch(DEMO_LOGIN_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email }),
