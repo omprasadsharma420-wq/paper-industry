@@ -1,0 +1,2 @@
+[functions.agra-demo-login]
+verify_jwt = false

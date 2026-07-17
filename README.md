@@ -26,7 +26,7 @@ No browser fallback or fictional local state is used. If Supabase or n8n is unav
 | Operations Supervisor | `supervisor@agra-demo.example` | Approval, cancellation, exceptions, reports |
 | Manager | `manager@agra-demo.example` | Full visibility, team access, system health, reset |
 
-The public pilot opens a real role-scoped demo session when a role button is selected. The shared demo password remains a server-only environment variable and is never stored in the repository or sent to the browser.
+The public pilot opens a real role-scoped demo session when a role button is selected. A restricted Supabase Edge Function brokers a short-lived passwordless session; no demo password is stored in the app or sent to the browser.
 
 ## Run Locally
 
@@ -35,7 +35,7 @@ pnpm install
 pnpm dev
 ```
 
-Copy `.env.example` to `.env.local` and set `AGRA_DEMO_PASSWORD` to run one-click demo access locally. The Supabase publishable key is public by design; never place the demo password, a Supabase secret, or a service-role key in a `NEXT_PUBLIC_*` variable.
+Copy `.env.example` to `.env.local`. `AGRA_DEMO_PASSWORD` is required only by the live verification script. The Supabase publishable key is public by design; never place the demo password, a Supabase secret, or a service-role key in a `NEXT_PUBLIC_*` variable.
 
 ## Verification
 
