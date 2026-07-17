@@ -1,19 +1,18 @@
 "use client";
 
-import type { FormEvent } from "react";
 import { useEffect, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
-import { ArrowRight, CheckCircle2, Factory, LockKeyhole, UserRound } from "lucide-react";
+import { ArrowRight, CheckCircle2, Factory } from "lucide-react";
 import { AgraOperationsApp } from "@/components/agra-operations-app";
-import { getSession, signIn, watchSession } from "@/lib/agra-backend";
+import { getSession, signInDemo, watchSession } from "@/lib/agra-backend";
 import type { Role } from "@/lib/agra-types";
 
 const DEMO_ACCOUNTS: Array<{ role: Role; label: string; email: string }> = [
+  { role: "MANAGER_ADMIN", label: "Manager", email: "manager@agra-demo.example" },
   { role: "SALES_ORDER_COORDINATOR", label: "Sales", email: "sales@agra-demo.example" },
   { role: "INVENTORY_QUALITY", label: "Stock & quality", email: "quality@agra-demo.example" },
   { role: "PACKING_DISPATCH", label: "Packing", email: "packing@agra-demo.example" },
   { role: "OPERATIONS_SUPERVISOR", label: "Supervisor", email: "supervisor@agra-demo.example" },
-  { role: "MANAGER_ADMIN", label: "Manager", email: "manager@agra-demo.example" },
 ];
 
 export default function Page() {
@@ -47,22 +46,19 @@ export default function Page() {
 }
 
 function LoginScreen({ onSignedIn }: { onSignedIn: (session: Session) => void }) {
-  const [email, setEmail] = useState(DEMO_ACCOUNTS[4].email);
-  const [password, setPassword] = useState("");
-  const [busy, setBusy] = useState(false);
+  const [busyEmail, setBusyEmail] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const submit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setBusy(true);
+  const enterDemo = async (email: string) => {
+    setBusyEmail(email);
     setError(null);
     try {
-      const nextSession = await signIn(email.trim(), password);
+      const nextSession = await signInDemo(email);
       onSignedIn(nextSession);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Sign in failed.");
+      setError(cause instanceof Error ? cause.message : "The demo could not be opened.");
     } finally {
-      setBusy(false);
+      setBusyEmail(null);
     }
   };
 
@@ -77,35 +73,30 @@ function LoginScreen({ onSignedIn }: { onSignedIn: (session: Session) => void })
             </div>
 
             <div className="mt-12">
-              <h1 className="text-3xl font-semibold text-neutral-950 sm:text-4xl">Sign in to operations</h1>
-              <p className="mt-3 text-base leading-7 text-neutral-600">Secure access for the Agra Industries paper-products reference pilot.</p>
+              <h1 className="text-3xl font-semibold text-neutral-950 sm:text-4xl">Choose your role</h1>
+              <p className="mt-3 text-base leading-7 text-neutral-600">Open the Agra Industries reference pilot with the right work view.</p>
             </div>
 
-            <div className="mt-7 grid grid-cols-2 gap-2 sm:grid-cols-3" aria-label="Demo roles">
+            {error ? <div role="alert" className="mt-6 rounded-md border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-800">{error}</div> : null}
+
+            <div className="mt-7 grid grid-cols-2 gap-2" aria-label="Demo roles">
               {DEMO_ACCOUNTS.map((account) => {
-                const selected = email === account.email;
+                const opening = busyEmail === account.email;
+                const isManager = account.role === "MANAGER_ADMIN";
                 return (
-                  <button key={account.email} type="button" onClick={() => setEmail(account.email)} className={`min-h-10 rounded-md border px-3 text-left text-xs font-semibold transition ${selected ? "border-neutral-950 bg-neutral-950 text-white" : "border-neutral-300 bg-white text-neutral-700 hover:bg-neutral-50"}`}>
-                    {account.label}
+                  <button
+                    key={account.email}
+                    type="button"
+                    disabled={busyEmail !== null}
+                    onClick={() => void enterDemo(account.email)}
+                    className={`flex min-h-12 items-center justify-between gap-3 rounded-md border px-4 text-left text-sm font-semibold transition disabled:cursor-wait disabled:opacity-55 ${isManager ? "col-span-2 border-neutral-950 bg-neutral-950 text-white hover:bg-neutral-800" : "border-neutral-300 bg-white text-neutral-800 hover:bg-neutral-50"}`}
+                  >
+                    <span>{opening ? "Opening..." : account.label}</span>
+                    <ArrowRight className="h-4 w-4 shrink-0" />
                   </button>
                 );
               })}
             </div>
-
-            <form onSubmit={(event) => void submit(event)} className="mt-7 space-y-4">
-              <label className="block text-sm font-medium text-neutral-700">
-                Email
-                <span className="relative mt-1.5 block"><UserRound className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-neutral-400" /><input type="email" value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="username" required className="h-11 w-full rounded-md border border-neutral-300 bg-white pl-10 pr-3 text-sm" /></span>
-              </label>
-              <label className="block text-sm font-medium text-neutral-700">
-                Password
-                <span className="relative mt-1.5 block"><LockKeyhole className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-neutral-400" /><input type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="current-password" required className="h-11 w-full rounded-md border border-neutral-300 bg-white pl-10 pr-3 text-sm" /></span>
-              </label>
-              {error ? <div role="alert" className="rounded-md border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-800">{error}</div> : null}
-              <button type="submit" disabled={busy} className="flex h-11 w-full items-center justify-center gap-2 rounded-md bg-neutral-950 px-4 text-sm font-semibold text-white transition hover:bg-neutral-800 disabled:opacity-50">
-                {busy ? "Signing in..." : "Sign in"}<ArrowRight className="h-4 w-4" />
-              </button>
-            </form>
 
             <div className="mt-8 flex items-start gap-3 border-t border-neutral-200 pt-5 text-sm text-neutral-600">
               <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
