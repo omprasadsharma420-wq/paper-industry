@@ -26,7 +26,7 @@ The public n8n health endpoint must return `ok: true` and `databaseAuthority: Su
 
 Only the Manager role can reset the reference dataset.
 
-1. Sign in as Manager.
+1. Select **Manager** on the role screen.
 2. Open **System**.
 3. Select **Reset demo**.
 4. Confirm the dialog.
@@ -75,7 +75,7 @@ grant execute on function public.demo_apply_workflow_action(
 
 ## Pilot Limitations
 
-- Demo users share a presentation password; production requires individual users, password policy, recovery, and session governance.
+- One-click role access is intentionally limited to the public reference pilot. Production requires individual sign-in, password policy, recovery, session governance, and removal of the demo session broker.
 - Scheduled n8n monitors currently use a limited demo Manager account. Production should use a dedicated automation identity and protected n8n credential.
 - Document references are tracked, but file upload and storage are not included.
 - Pricing, revenue, cost, tax, accounting, and payment controls are intentionally not configured.

@@ -22,11 +22,31 @@ function requireSupabase() {
   return supabase;
 }
 
-export async function signIn(email: string, password: string) {
+type DemoSessionResponse = {
+  accessToken?: string;
+  refreshToken?: string;
+  message?: string;
+};
+
+export async function signInDemo(email: string) {
   const client = requireSupabase();
-  const { data, error } = await client.auth.signInWithPassword({ email, password });
+  const response = await fetch("/api/demo-login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email }),
+  });
+  const body = (await response.json().catch(() => null)) as DemoSessionResponse | null;
+
+  if (!response.ok || !body?.accessToken || !body.refreshToken) {
+    throw new Error(body?.message ?? "The demo sign-in service is unavailable.");
+  }
+
+  const { data, error } = await client.auth.setSession({
+    access_token: body.accessToken,
+    refresh_token: body.refreshToken,
+  });
   if (error) throw new Error(error.message);
-  if (!data.session) throw new Error("Sign in did not create a session.");
+  if (!data.session) throw new Error("Demo access did not create a session.");
   return data.session;
 }
 
