@@ -124,7 +124,8 @@ function shortDate(value: string | null) {
     day: "numeric",
     month: "short",
     year: "numeric",
-  }).format(new Date(`${value}T00:00:00`));
+    timeZone: "Asia/Kathmandu",
+  }).format(new Date(`${value}T00:00:00+05:45`));
 }
 
 function dateTime(value: string) {
@@ -133,7 +134,17 @@ function dateTime(value: string) {
     month: "short",
     hour: "numeric",
     minute: "2-digit",
+    timeZone: "Asia/Kathmandu",
   }).format(new Date(value));
+}
+
+function nepalToday() {
+  return new Intl.DateTimeFormat("en-CA", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    timeZone: "Asia/Kathmandu",
+  }).format(new Date());
 }
 
 function number(value: number) {
@@ -155,6 +166,25 @@ function statusTone(status: string) {
 
 function can(role: Role, roles: Role[]) {
   return roles.includes(role);
+}
+
+function locationState() {
+  if (typeof window === "undefined") return { view: "home" as ViewKey, orderId: null as string | null };
+  const params = new URLSearchParams(window.location.search);
+  const requestedView = params.get("view") as ViewKey | null;
+  return {
+    view: requestedView && requestedView in VIEW_META ? requestedView : "home",
+    orderId: params.get("order"),
+  };
+}
+
+function updateLocation(view: ViewKey, orderId: string | null, replace = false) {
+  const url = new URL(window.location.href);
+  if (view === "home") url.searchParams.delete("view");
+  else url.searchParams.set("view", view);
+  if (view === "orders" && orderId) url.searchParams.set("order", orderId);
+  else url.searchParams.delete("order");
+  window.history[replace ? "replaceState" : "pushState"]({}, "", url);
 }
 
 function StatusBadge({ status }: { status: string }) {
@@ -249,7 +279,7 @@ function IconButton({ label, children, onClick, disabled = false }: { label: str
 function roleWork(role: Role, orders: Order[], exceptions: OperationalException[]) {
   if (role === "SALES_ORDER_COORDINATOR") return orders.filter((order) => order.fulfillment_status === "DRAFT");
   if (role === "INVENTORY_QUALITY") return orders.filter((order) => ["AWAITING_STOCK_CHECK", "AWAITING_PRODUCTION", "AWAITING_QC", "REWORK_REQUIRED", "BLOCKED"].includes(order.fulfillment_status));
-  if (role === "PACKING_DISPATCH") return orders.filter((order) => ["APPROVED", "PICKING", "PACKING", "READY_FOR_HANDOVER"].includes(order.fulfillment_status));
+  if (role === "PACKING_DISPATCH") return orders.filter((order) => ["APPROVED", "PICKING", "PACKING", "READY_FOR_HANDOVER"].includes(order.fulfillment_status) || order.exceptions.some((item) => item.status === "OPEN" && item.code === "MISSING_REQUIRED_DOCUMENT"));
   if (role === "OPERATIONS_SUPERVISOR") return orders.filter((order) => order.fulfillment_status === "AWAITING_APPROVAL" || order.exceptions.some((item) => item.status === "OPEN"));
   const issueOrders = new Set(exceptions.filter((item) => item.status === "OPEN").map((item) => item.order_id));
   return orders.filter((order) => ACTIVE_STATUSES.has(order.fulfillment_status) || issueOrders.has(order.id));
@@ -257,13 +287,13 @@ function roleWork(role: Role, orders: Order[], exceptions: OperationalException[
 
 export function AgraOperationsApp({ session }: { session: Session }) {
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
-  const [view, setView] = useState<ViewKey>("home");
+  const [view, setView] = useState<ViewKey>(() => locationState().view);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
+  const [selectedOrderId, setSelectedOrderId] = useState<string | null>(() => locationState().orderId);
   const [dialog, setDialog] = useState<DialogState>(null);
   const [mobileNav, setMobileNav] = useState(false);
 
@@ -284,7 +314,7 @@ export function AgraOperationsApp({ session }: { session: Session }) {
 
   useEffect(() => {
     const initial = window.setTimeout(() => void refresh(), 0);
-    const interval = window.setInterval(() => void refresh(true), 30000);
+    const interval = window.setInterval(() => void refresh(true), 3000);
     const onFocus = () => void refresh(true);
     window.addEventListener("focus", onFocus);
     return () => {
@@ -293,6 +323,17 @@ export function AgraOperationsApp({ session }: { session: Session }) {
       window.removeEventListener("focus", onFocus);
     };
   }, [refresh]);
+
+  useEffect(() => {
+    const onPopState = () => {
+      const next = locationState();
+      setView(next.view);
+      setSelectedOrderId(next.orderId);
+      setDialog(null);
+    };
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
 
   const runAction = useCallback(async (action: string, orderId: string | null, payload: Record<string, unknown> = {}) => {
     setBusy(action);
@@ -317,11 +358,22 @@ export function AgraOperationsApp({ session }: { session: Session }) {
 
   const role = workspace.currentUser.role;
   const availableViews = ROLE_NAV[role];
+  const activeView = availableViews.includes(view) ? view : "home";
   const defaultOrder = roleWork(role, workspace.orders, workspace.exceptions)[0] ?? workspace.orders[0] ?? null;
-  const selectedOrder = workspace.orders.find((order) => order.id === selectedOrderId) ?? defaultOrder;
+  const selectedOrder = selectedOrderId
+    ? workspace.orders.find((order) => order.id === selectedOrderId) ?? null
+    : defaultOrder;
 
   const chooseView = (next: ViewKey) => {
     setView(next);
+    if (next !== "orders") setSelectedOrderId(null);
+    updateLocation(next, next === "orders" ? selectedOrderId : null);
+    setMobileNav(false);
+  };
+  const chooseOrder = (id: string) => {
+    setSelectedOrderId(id);
+    setView("orders");
+    updateLocation("orders", id);
     setMobileNav(false);
   };
 
@@ -344,7 +396,7 @@ export function AgraOperationsApp({ session }: { session: Session }) {
             {availableViews.map((key) => {
               const item = VIEW_META[key];
               const Icon = item.icon;
-              const active = view === key;
+              const active = activeView === key;
               return (
                 <button
                   key={key}
@@ -387,7 +439,7 @@ export function AgraOperationsApp({ session }: { session: Session }) {
         <header className="sticky top-0 z-20 flex min-h-16 items-center border-b border-neutral-200 bg-[#f5f5f7]/90 px-4 backdrop-blur-xl sm:px-6 lg:px-8">
           <button type="button" aria-label="Open menu" onClick={() => setMobileNav(true)} className="mr-3 grid h-9 w-9 place-items-center rounded-md border border-neutral-300 bg-white lg:hidden"><Menu className="h-5 w-5" /></button>
           <div className="min-w-0">
-            <h1 className="truncate text-base font-semibold sm:text-lg">{VIEW_META[view].title}</h1>
+            <h1 className="truncate text-base font-semibold sm:text-lg">{VIEW_META[activeView].title}</h1>
             <p className="truncate text-xs text-neutral-500">{workspace.organization.name}</p>
           </div>
           <div className="ml-auto flex items-center gap-2">
@@ -413,17 +465,17 @@ export function AgraOperationsApp({ session }: { session: Session }) {
             </div>
           ) : null}
 
-          {view === "home" ? <HomeView workspace={workspace} onOpenOrder={(id) => { setSelectedOrderId(id); setView("orders"); }} onNewOrder={() => setDialog({ type: "newOrder" })} /> : null}
-          {view === "orders" ? <OrdersView workspace={workspace} selectedOrder={selectedOrder} onSelectOrder={setSelectedOrderId} onNewOrder={() => setDialog({ type: "newOrder" })} onRun={runAction} onDialog={setDialog} busy={busy} /> : null}
-          {view === "customers" ? <CustomersView customers={workspace.customers} onNew={() => setDialog({ type: "newCustomer" })} /> : null}
-          {view === "products" ? <ProductsView products={workspace.products} canAdd={can(role, ["INVENTORY_QUALITY", "MANAGER_ADMIN"])} onNew={() => setDialog({ type: "newProduct" })} /> : null}
-          {view === "stock" ? <StockView products={workspace.products} batches={workspace.inventoryBatches} canEdit={can(role, ["INVENTORY_QUALITY", "MANAGER_ADMIN"])} onReceive={() => setDialog({ type: "receiveBatch" })} onInspect={(batchId) => setDialog({ type: "inspectBatch", batchId })} /> : null}
-          {view === "quality" ? <QualityView workspace={workspace} onOpenOrder={(id) => { setSelectedOrderId(id); setView("orders"); }} onDialog={setDialog} /> : null}
-          {view === "dispatch" ? <DispatchView workspace={workspace} onOpenOrder={(id) => { setSelectedOrderId(id); setView("orders"); }} onDialog={setDialog} /> : null}
-          {view === "issues" ? <IssuesView workspace={workspace} onOpenOrder={(id) => { setSelectedOrderId(id); setView("orders"); }} onResolve={(orderId, exceptionId) => setDialog({ type: "resolve", orderId, exceptionId })} /> : null}
-          {view === "reports" ? <ReportsView workspace={workspace} /> : null}
-          {view === "team" ? <TeamView team={workspace.team} onEdit={(profileId) => setDialog({ type: "team", profileId })} /> : null}
-          {view === "system" ? <SystemView workspace={workspace} busy={busy} onReset={async () => { if (!window.confirm("Reset all demo data to the reference starting point?")) return; await runAction("RESET_DEMO", null); }} /> : null}
+          {activeView === "home" ? <HomeView workspace={workspace} onOpenOrder={chooseOrder} onNewOrder={() => setDialog({ type: "newOrder" })} /> : null}
+          {activeView === "orders" ? <OrdersView workspace={workspace} selectedOrder={selectedOrder} onSelectOrder={chooseOrder} onNewOrder={() => setDialog({ type: "newOrder" })} onRun={runAction} onDialog={setDialog} busy={busy} /> : null}
+          {activeView === "customers" ? <CustomersView customers={workspace.customers} onNew={() => setDialog({ type: "newCustomer" })} /> : null}
+          {activeView === "products" ? <ProductsView products={workspace.products} canAdd={can(role, ["INVENTORY_QUALITY", "MANAGER_ADMIN"])} onNew={() => setDialog({ type: "newProduct" })} /> : null}
+          {activeView === "stock" ? <StockView products={workspace.products} batches={workspace.inventoryBatches} canEdit={can(role, ["INVENTORY_QUALITY", "MANAGER_ADMIN"])} onReceive={() => setDialog({ type: "receiveBatch" })} onInspect={(batchId) => setDialog({ type: "inspectBatch", batchId })} /> : null}
+          {activeView === "quality" ? <QualityView workspace={workspace} onOpenOrder={chooseOrder} onDialog={setDialog} /> : null}
+          {activeView === "dispatch" ? <DispatchView workspace={workspace} onOpenOrder={chooseOrder} onDialog={setDialog} /> : null}
+          {activeView === "issues" ? <IssuesView workspace={workspace} onOpenOrder={chooseOrder} onResolve={(orderId, exceptionId) => setDialog({ type: "resolve", orderId, exceptionId })} /> : null}
+          {activeView === "reports" ? <ReportsView workspace={workspace} /> : null}
+          {activeView === "team" ? <TeamView team={workspace.team} onEdit={(profileId) => setDialog({ type: "team", profileId })} /> : null}
+          {activeView === "system" ? <SystemView workspace={workspace} busy={busy} onReset={async () => { if (!window.confirm("Reset all demo data to the reference starting point?")) return; await runAction("RESET_DEMO", null); }} /> : null}
 
           <aside className="mt-9 flex items-start gap-3 border-t border-neutral-200 pt-4 text-xs leading-5 text-neutral-500">
             <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-[#176b5c]" aria-hidden="true" />
@@ -581,11 +633,31 @@ function DemoProgress({ order, onOpen }: { order: Order; onOpen: () => void }) {
 function OrdersView({ workspace, selectedOrder, onSelectOrder, onNewOrder, onRun, onDialog, busy }: { workspace: Workspace; selectedOrder: Order | null; onSelectOrder: (id: string) => void; onNewOrder: () => void; onRun: (action: string, orderId: string | null, payload?: Record<string, unknown>) => Promise<boolean>; onDialog: (state: DialogState) => void; busy: string | null }) {
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("ALL");
+  const [customer, setCustomer] = useState("ALL");
+  const [dispatchDate, setDispatchDate] = useState("");
+  const [sku, setSku] = useState("ALL");
+  const [priority, setPriority] = useState("ALL");
+  const [owner, setOwner] = useState("ALL");
+  const [sort, setSort] = useState("DUE_SOON");
   const role = workspace.currentUser.role;
+  const owners = [...new Set(workspace.orders.map((order) => orderControl(order.fulfillment_status).owner))].sort();
   const filtered = workspace.orders.filter((order) => {
-    const haystack = `${order.order_no} ${order.customer.name} ${order.items.map((item) => item.product.name).join(" ")}`.toLowerCase();
-    return (!search || haystack.includes(search.toLowerCase())) && (status === "ALL" || order.fulfillment_status === status);
+    const haystack = `${order.order_no} ${order.customer.name} ${order.customer_order_reference ?? ""} ${order.items.map((item) => `${item.product.sku} ${item.product.name}`).join(" ")}`.toLowerCase();
+    return (!search || haystack.includes(search.toLowerCase()))
+      && (status === "ALL" || order.fulfillment_status === status)
+      && (customer === "ALL" || order.customer_id === customer)
+      && (!dispatchDate || order.requested_dispatch_date === dispatchDate)
+      && (sku === "ALL" || order.items.some((item) => item.product_id === sku))
+      && (priority === "ALL" || order.priority === priority)
+      && (owner === "ALL" || orderControl(order.fulfillment_status).owner === owner);
+  }).sort((left, right) => {
+    if (sort === "ORDER_NO") return left.order_no.localeCompare(right.order_no);
+    if (sort === "CUSTOMER") return left.customer.name.localeCompare(right.customer.name) || left.order_no.localeCompare(right.order_no);
+    if (sort === "NEWEST") return right.order_date.localeCompare(left.order_date) || right.order_no.localeCompare(left.order_no);
+    return left.requested_dispatch_date.localeCompare(right.requested_dispatch_date) || left.order_no.localeCompare(right.order_no);
   });
+  const hasFilters = Boolean(search || dispatchDate || [status, customer, sku, priority, owner].some((value) => value !== "ALL"));
+  const clearFilters = () => { setSearch(""); setStatus("ALL"); setCustomer("ALL"); setDispatchDate(""); setSku("ALL"); setPriority("ALL"); setOwner("ALL"); };
 
   return (
     <div className="grid min-h-[calc(100vh-8rem)] gap-6 xl:grid-cols-[minmax(0,1fr)_430px]">
@@ -600,11 +672,18 @@ function OrdersView({ workspace, selectedOrder, onSelectOrder, onNewOrder, onRun
             <option value="ALL">All stages</option>
             {STATUS_ORDER.map((item) => <option key={item} value={item}>{words(item)}</option>)}
           </select>
+          <select value={customer} onChange={(event) => setCustomer(event.target.value)} aria-label="Filter by customer" className="h-9 max-w-[190px] rounded-md border border-neutral-300 bg-white px-3 text-sm"><option value="ALL">All customers</option>{workspace.customers.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select>
+          <input value={dispatchDate} onChange={(event) => setDispatchDate(event.target.value)} type="date" aria-label="Filter by dispatch date" className="h-9 rounded-md border border-neutral-300 bg-white px-3 text-sm" />
+          <select value={sku} onChange={(event) => setSku(event.target.value)} aria-label="Filter by SKU" className="h-9 max-w-[190px] rounded-md border border-neutral-300 bg-white px-3 text-sm"><option value="ALL">All SKUs</option>{workspace.products.map((item) => <option key={item.id} value={item.id}>{item.sku}</option>)}</select>
+          <select value={priority} onChange={(event) => setPriority(event.target.value)} aria-label="Filter by priority" className="h-9 rounded-md border border-neutral-300 bg-white px-3 text-sm"><option value="ALL">All priorities</option>{["LOW", "NORMAL", "HIGH", "URGENT"].map((item) => <option key={item} value={item}>{words(item)}</option>)}</select>
+          <select value={owner} onChange={(event) => setOwner(event.target.value)} aria-label="Filter by responsible team" className="h-9 max-w-[190px] rounded-md border border-neutral-300 bg-white px-3 text-sm"><option value="ALL">All teams</option>{owners.map((item) => <option key={item} value={item}>{item}</option>)}</select>
+          <select value={sort} onChange={(event) => setSort(event.target.value)} aria-label="Sort orders" className="h-9 rounded-md border border-neutral-300 bg-white px-3 text-sm"><option value="DUE_SOON">Due soon</option><option value="NEWEST">Newest</option><option value="ORDER_NO">Order number</option><option value="CUSTOMER">Customer</option></select>
+          {hasFilters ? <SecondaryButton onClick={clearFilters}><X className="h-4 w-4" />Clear</SecondaryButton> : null}
           {can(role, ["SALES_ORDER_COORDINATOR", "MANAGER_ADMIN"]) ? <PrimaryButton onClick={onNewOrder}><Plus className="h-4 w-4" />New order</PrimaryButton> : null}
         </div>
-        <div className="divide-y divide-neutral-200">
+        <div data-testid="order-list" className="divide-y divide-neutral-200">
           {filtered.map((order) => (
-            <button key={order.id} type="button" onClick={() => onSelectOrder(order.id)} className={`grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-4 px-2 py-4 text-left transition sm:grid-cols-[145px_minmax(0,1fr)_130px_auto] ${selectedOrder?.id === order.id ? "bg-white" : "hover:bg-white/70"}`}>
+            <button key={order.id} type="button" data-testid="order-row" data-order-id={order.id} onClick={() => onSelectOrder(order.id)} className={`grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-4 px-2 py-4 text-left transition sm:grid-cols-[145px_minmax(0,1fr)_130px_auto] ${selectedOrder?.id === order.id ? "bg-white" : "hover:bg-white/70"}`}>
               <div>
                 <p className="text-sm font-semibold">{order.order_no}</p>
                 <p className="mt-1 text-xs text-neutral-500">{order.priority} priority</p>
@@ -705,7 +784,7 @@ function OrderDetail({ order, role, busy, onRun, onDialog }: { order: Order; rol
         {status === "AWAITING_QC" && can(role, ["INVENTORY_QUALITY", "MANAGER_ADMIN"]) ? <PrimaryButton disabled={!!busy} onClick={() => onDialog({ type: "quality", orderId: order.id })}>Record quality check</PrimaryButton> : null}
         {status === "REWORK_REQUIRED" && can(role, ["INVENTORY_QUALITY", "MANAGER_ADMIN"]) && order.reworkRecords.find((item) => item.status !== "COMPLETED") ? <PrimaryButton disabled={!!busy} onClick={() => onDialog({ type: "rework", orderId: order.id, reworkId: order.reworkRecords.find((item) => item.status !== "COMPLETED")!.id })}>Finish rework</PrimaryButton> : null}
         {status === "PACKING" && can(role, ["PACKING_DISPATCH", "MANAGER_ADMIN"]) ? <PrimaryButton disabled={!!busy} onClick={() => onDialog({ type: "packing", orderId: order.id })}>Finish packing</PrimaryButton> : null}
-        {status === "READY_FOR_HANDOVER" && can(role, ["PACKING_DISPATCH", "OPERATIONS_SUPERVISOR", "MANAGER_ADMIN"]) ? <SecondaryButton disabled={!!busy} onClick={() => onDialog({ type: "documents", orderId: order.id })}><FileCheck2 className="h-4 w-4" />Check documents</SecondaryButton> : null}
+        {(status === "READY_FOR_HANDOVER" || order.exceptions.some((item) => item.status === "OPEN" && item.code === "MISSING_REQUIRED_DOCUMENT")) && can(role, ["PACKING_DISPATCH", "OPERATIONS_SUPERVISOR", "MANAGER_ADMIN"]) ? <SecondaryButton disabled={!!busy} onClick={() => onDialog({ type: "documents", orderId: order.id })}><FileCheck2 className="h-4 w-4" />Check documents</SecondaryButton> : null}
         {status === "READY_FOR_HANDOVER" && can(role, ["PACKING_DISPATCH", "OPERATIONS_SUPERVISOR", "MANAGER_ADMIN"]) ? <PrimaryButton disabled={!!busy} onClick={() => onDialog({ type: "handover", orderId: order.id })}><Truck className="h-4 w-4" />Confirm handover</PrimaryButton> : null}
         {ACTIVE_STATUSES.has(status) && can(role, ["OPERATIONS_SUPERVISOR", "MANAGER_ADMIN"]) ? <button type="button" disabled={!!busy} onClick={() => onDialog({ type: "cancel", orderId: order.id })} className="min-h-9 rounded-md px-3 text-sm font-semibold text-red-700 hover:bg-red-50">Cancel order</button> : null}
       </div>
@@ -768,7 +847,7 @@ function QualityView({ workspace, onOpenOrder, onDialog }: { workspace: Workspac
 }
 
 function DispatchView({ workspace, onOpenOrder, onDialog }: { workspace: Workspace; onOpenOrder: (id: string) => void; onDialog: (state: DialogState) => void }) {
-  const work = workspace.orders.filter((order) => ["APPROVED", "PICKING", "PACKING", "READY_FOR_HANDOVER"].includes(order.fulfillment_status));
+  const work = workspace.orders.filter((order) => ["APPROVED", "PICKING", "PACKING", "READY_FOR_HANDOVER"].includes(order.fulfillment_status) || order.exceptions.some((item) => item.status === "OPEN" && item.code === "MISSING_REQUIRED_DOCUMENT"));
   return (
     <section>
       <SectionHeader title="Packing and handover queue" detail={`${work.length} active order${work.length === 1 ? "" : "s"}`} />
@@ -788,7 +867,7 @@ function IssuesView({ workspace, onOpenOrder, onResolve }: { workspace: Workspac
 }
 
 function ReportsView({ workspace }: { workspace: Workspace }) {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = nepalToday();
   const activeOrders = workspace.orders.filter((order) => ACTIVE_STATUSES.has(order.fulfillment_status));
   const dispatchedOrders = workspace.orders.filter((order) => order.fulfillment_status === "DISPATCHED");
   const delayedOrders = activeOrders.filter((order) => order.requested_dispatch_date < today);
@@ -904,6 +983,7 @@ function SystemView({ workspace, busy, onReset }: { workspace: Workspace; busy: 
 
 function OperationDialog({ dialog, workspace, busy, onClose, onRun }: { dialog: Exclude<DialogState, null>; workspace: Workspace; busy: string | null; onClose: () => void; onRun: (action: string, orderId: string | null, payload?: Record<string, unknown>) => Promise<boolean> }) {
   const order = "orderId" in dialog ? workspace.orders.find((item) => item.id === dialog.orderId) ?? null : null;
+  const rework = dialog.type === "rework" ? order?.reworkRecords.find((item) => item.id === dialog.reworkId) ?? null : null;
   const title = { newOrder: "New order", newCustomer: "New customer", newProduct: "New product", receiveBatch: "Receive finished batch", inspectBatch: "Inspect batch", production: "Production update", quality: "Quality check", rework: "Finish rework", packing: "Finish packing", documents: "Check documents", handover: "Confirm handover", cancel: "Cancel order", resolve: "Resolve issue", team: "Edit team access" }[dialog.type];
 
   return (
@@ -917,11 +997,11 @@ function OperationDialog({ dialog, workspace, busy, onClose, onRun }: { dialog: 
           {dialog.type === "receiveBatch" ? <SimpleForm busy={busy} onCancel={onClose} fields={[selectField("productId", "Product", workspace.products.map((product) => ({ value: product.id, label: `${product.sku} - ${product.name}` }))), field("batchNo", "Batch number", "text", "", true), field("productionDate", "Production date", "date", "", true), field("quantity", "Quantity", "number", "", true), selectField("unit", "Unit", ["PIECE", "SHEET", "PACK", "BUNDLE", "CARTON", "KG", "DOZEN"]), field("storageLocation", "Storage location", "text", "Finished Goods Room", true), field("shelfReference", "Shelf reference"), field("notes", "Notes")]} onSubmit={(payload) => onRun("RECEIVE_BATCH", null, payload)} /> : null}
           {dialog.type === "inspectBatch" ? <SimpleForm busy={busy} onCancel={onClose} hidden={{ batchId: dialog.batchId }} fields={[selectField("result", "Inspection result", ["RELEASED", "REWORK_REQUIRED", "BLOCKED", "DAMAGED"]), field("notes", "Inspection notes")]} onSubmit={(payload) => onRun("INSPECT_BATCH", null, payload)} /> : null}
           {dialog.type === "production" ? <SimpleForm busy={busy} onCancel={onClose} fields={[field("productionReference", "Production reference", "text", "", true), field("expectedCompletionDate", "Expected finish", "date", "", true), field("completedQuantity", "Completed quantity", "number", "0", true), field("completionNotes", "Notes")]} onSubmit={(payload) => onRun("RECORD_PRODUCTION", dialog.orderId, payload)} /> : null}
-          {dialog.type === "quality" ? <SimpleForm busy={busy} onCancel={onClose} fields={[selectField("result", "Result", ["PASSED", "REWORK_REQUIRED", "BLOCKED", "DAMAGED"]), field("affectedQuantity", "Affected quantity", "number"), field("defectType", "Defect type"), field("defectDescription", "Defect details"), field("reworkDueDate", "Rework due date", "date"), field("notes", "Notes")]} onSubmit={(payload) => onRun("RECORD_QC", dialog.orderId, payload)} /> : null}
-          {dialog.type === "rework" ? <SimpleForm busy={busy} onCancel={onClose} hidden={{ reworkId: dialog.reworkId }} fields={[selectField("result", "Reinspection result", ["RELEASED", "BLOCKED", "DAMAGED"]), field("completionNote", "Completion note", "text", "", true)]} onSubmit={(payload) => onRun("COMPLETE_REWORK", dialog.orderId, payload)} /> : null}
+          {dialog.type === "quality" ? <SimpleForm busy={busy} onCancel={onClose} fields={[selectField("result", "Result", ["PASSED", "REWORK_REQUIRED", "BLOCKED", "DAMAGED"]), checkboxField("qcPageCount", "Correct page count"), checkboxField("qcDimensions", "Dimensions correct"), checkboxField("qcBinding", "Binding secure"), checkboxField("qcCover", "Cover correct"), checkboxField("qcBranding", "Branding correct"), checkboxField("qcPagesClean", "Pages clean"), checkboxField("qcDamageFree", "No torn pages"), field("affectedQuantity", "Affected quantity", "number"), field("defectType", "Defect type"), field("defectDescription", "Defect details"), field("reworkDueDate", "Rework due date", "date"), field("notes", "Notes")]} onSubmit={(payload) => onRun("RECORD_QC", dialog.orderId, { ...payload, checklist: qualityChecklist(payload) })} /> : null}
+          {dialog.type === "rework" ? <SimpleForm busy={busy} onCancel={onClose} hidden={{ reworkId: dialog.reworkId }} fields={[field("releasedQuantity", "Corrected and released", "number", String(rework?.rework_quantity ?? ""), true), field("damagedQuantity", "Damaged", "number", "0", true), field("blockedQuantity", "Blocked", "number", "0", true), field("completionNote", "Completion note", "text", "", true)]} onSubmit={(payload) => onRun("COMPLETE_REWORK", dialog.orderId, payload)} /> : null}
           {dialog.type === "packing" ? <SimpleForm busy={busy} onCancel={onClose} fields={[field("packageCount", "Package count", "number", "1", true), field("cartonCount", "Carton count", "number", "0"), field("bundleCount", "Bundle count", "number", "0"), field("quantityPerPackage", "Quantity per package", "number"), field("packagingType", "Packing type", "text", "Protective paper packaging", true), field("totalShipmentWeightKg", "Shipment weight (kg)", "number"), checkboxField("moistureProtection", "Moisture protection"), checkboxField("fragile", "Fragile"), field("notes", "Packing notes")]} onSubmit={(payload) => onRun("COMPLETE_PACKING", dialog.orderId, { ...payload, items: order?.items.map((item) => ({ orderItemId: item.id, packedQuantity: item.approved_quantity })) ?? [] })} /> : null}
           {dialog.type === "documents" && order ? <DocumentsForm order={order} busy={busy} onCancel={onClose} onSubmit={(payload) => onRun("VERIFY_DOCUMENTS", order.id, payload)} /> : null}
-          {dialog.type === "handover" ? <SimpleForm busy={busy} onCancel={onClose} fields={[selectField("deliveryMethod", "Delivery method", ["CUSTOMER_PICKUP", "OWN_VEHICLE", "THIRD_PARTY_COURIER", "HIRED_TRANSPORTER", "EXPORT_FREIGHT"]), field("companyName", "Courier / company"), field("trackingNumber", "Tracking number"), field("consignmentNumber", "Consignment number"), field("packageCount", "Package count", "number", "1", true), field("shipmentWeightKg", "Shipment weight (kg)", "number"), field("handoverPerson", "Handover person", "text", workspace.currentUser.full_name, true), field("receiverName", "Receiver name", "text", "", true), field("receiverPhone", "Receiver phone"), field("vehicleNumber", "Vehicle number"), field("driverName", "Driver name"), field("driverPhone", "Driver phone"), field("destination", "Destination", "text", order?.customer.address ?? ""), field("acknowledgementReference", "Acknowledgement ref."), field("notes", "Notes")]} onSubmit={(payload) => onRun("CONFIRM_HANDOVER", dialog.orderId, payload)} /> : null}
+          {dialog.type === "handover" ? <HandoverForm order={order} userName={workspace.currentUser.full_name} busy={busy} onCancel={onClose} onSubmit={(payload) => onRun("CONFIRM_HANDOVER", dialog.orderId, payload)} /> : null}
           {dialog.type === "cancel" ? <SimpleForm busy={busy} onCancel={onClose} fields={[field("reason", "Cancellation reason", "text", "", true)]} danger onSubmit={(payload) => onRun("CANCEL_ORDER", dialog.orderId, payload)} /> : null}
           {dialog.type === "resolve" ? <SimpleForm busy={busy} onCancel={onClose} hidden={{ exceptionId: dialog.exceptionId }} fields={[field("resolutionNote", "Resolution note", "text", "", true)]} onSubmit={(payload) => onRun("RESOLVE_EXCEPTION", dialog.orderId, payload)} /> : null}
           {dialog.type === "team" ? <TeamForm profile={workspace.team.find((item) => item.id === dialog.profileId)!} busy={busy} onCancel={onClose} onSubmit={(payload) => onRun("UPDATE_PROFILE", null, payload)} /> : null}
@@ -933,6 +1013,18 @@ function OperationDialog({ dialog, workspace, busy, onClose, onRun }: { dialog: 
 
 type FieldOption = string | { value: string; label: string };
 type FormField = { name: string; label: string; type: "text" | "email" | "number" | "date" | "select" | "checkbox"; placeholder?: string; required?: boolean; options?: FieldOption[] };
+function qualityChecklist(payload: Record<string, unknown>) {
+  return {
+    pageCount: payload.qcPageCount === true,
+    dimensions: payload.qcDimensions === true,
+    binding: payload.qcBinding === true,
+    coverFinish: payload.qcCover === true,
+    branding: payload.qcBranding === true,
+    pagesClean: payload.qcPagesClean === true,
+    damageFree: payload.qcDamageFree === true,
+  };
+}
+
 function field(name: string, label: string, type: FormField["type"] = "text", placeholder = "", required = false): FormField { return { name, label, type, placeholder, required }; }
 function selectField(name: string, label: string, options: FieldOption[]): FormField { return { name, label, type: "select", options, required: true }; }
 function checkboxField(name: string, label: string): FormField { return { name, label, type: "checkbox" }; }
@@ -977,6 +1069,45 @@ function NewOrderForm({ workspace, busy, onSubmit, onCancel }: { workspace: Work
       <div><div className="flex items-center justify-between"><h3 className="text-sm font-semibold">Order lines</h3><SecondaryButton onClick={() => setLines((items) => [...items, { key: crypto.randomUUID(), productId: "", quantity: "", unit: "PIECE" }])}><Plus className="h-4 w-4" />Add line</SecondaryButton></div><div className="mt-3 space-y-3">{lines.map((line, index) => <div key={line.key} className="grid items-end gap-3 rounded-md border border-neutral-200 p-3 sm:grid-cols-[minmax(0,1fr)_120px_120px_36px]"><label className="text-sm font-medium">Product<select value={line.productId} required onChange={(event) => setLines((items) => items.map((item) => item.key === line.key ? { ...item, productId: event.target.value, unit: workspace.products.find((product) => product.id === event.target.value)?.primary_unit ?? item.unit } : item))} className="mt-1.5 h-10 w-full rounded-md border border-neutral-300 bg-white px-3 text-sm"><option value="">Choose</option>{workspace.products.map((product) => <option key={product.id} value={product.id}>{product.sku} - {product.name}</option>)}</select></label><label className="text-sm font-medium">Quantity<input value={line.quantity} required type="number" min="0.001" step="any" onChange={(event) => setLines((items) => items.map((item) => item.key === line.key ? { ...item, quantity: event.target.value } : item))} className="mt-1.5 h-10 w-full rounded-md border border-neutral-300 px-3" /></label><label className="text-sm font-medium">Unit<input value={line.unit} readOnly className="mt-1.5 h-10 w-full rounded-md border border-neutral-200 bg-neutral-50 px-3 text-sm" /></label><IconButton label={`Remove line ${index + 1}`} disabled={lines.length === 1} onClick={() => setLines((items) => items.filter((item) => item.key !== line.key))}><X className="h-4 w-4" /></IconButton></div>)}</div></div>
       <div className="grid gap-4 sm:grid-cols-2"><FormControl field={field("customizationSummary", "Custom details")} /><FormControl field={field("specialPackagingInstructions", "Special packing")} /><FormControl field={checkboxField("isCustomOrder", "Custom order")} /><FormControl field={checkboxField("logoOrBrandingRequired", "Logo or branding needed")} /><FormControl field={checkboxField("customerSpecificationConfirmed", "Customer details confirmed")} /><FormControl field={checkboxField("sampleApprovalRequired", "Sample approval needed")} /></div>
       <div className="flex justify-end gap-2 border-t border-neutral-200 pt-4"><SecondaryButton onClick={onCancel}>Cancel</SecondaryButton><PrimaryButton type="submit" disabled={!!busy}>{busy ? "Creating..." : "Create order"}</PrimaryButton></div>
+    </form>
+  );
+}
+
+function HandoverForm({ order, userName, busy, onCancel, onSubmit }: { order: Order | null; userName: string; busy: string | null; onCancel: () => void; onSubmit: (payload: Record<string, unknown>) => Promise<boolean> }) {
+  const [method, setMethod] = useState("THIRD_PARTY_COURIER");
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const payload = payloadFromForm(event.currentTarget);
+    if (method === "CUSTOMER_PICKUP") payload.customerRepresentative = payload.receiverName;
+    await onSubmit(payload);
+  };
+  const isCourier = ["THIRD_PARTY_COURIER", "HIRED_TRANSPORTER", "EXPORT_FREIGHT"].includes(method);
+
+  return (
+    <form onSubmit={(event) => void submit(event)} className="space-y-4">
+      <div className="grid gap-4 sm:grid-cols-2">
+        <label className="block text-sm font-medium text-neutral-700">
+          <span>Delivery method<span className="text-red-600"> *</span></span>
+          <select name="deliveryMethod" value={method} onChange={(event) => setMethod(event.target.value)} required className="mt-1.5 h-10 w-full rounded-md border border-neutral-300 bg-white px-3 text-sm">
+            {["CUSTOMER_PICKUP", "COMPANY_VEHICLE", "THIRD_PARTY_COURIER", "HIRED_TRANSPORTER", "EXPORT_FREIGHT"].map((value) => <option key={value} value={value}>{words(value)}</option>)}
+          </select>
+        </label>
+        <FormControl field={field("packageCount", "Package count", "number", "1", true)} />
+        <FormControl field={field("handoverPerson", "Handover person", "text", userName, true)} />
+        {isCourier ? <FormControl field={field("companyName", "Courier / company", "text", "", true)} /> : null}
+        {isCourier ? <FormControl field={field("trackingNumber", "Tracking number", "text", "", true)} /> : null}
+        {isCourier ? <FormControl field={field("consignmentNumber", "Consignment number")} /> : null}
+        {isCourier ? <FormControl field={field("shipmentWeightKg", "Shipment weight (kg)", "number")} /> : null}
+        {method === "CUSTOMER_PICKUP" ? <FormControl field={field("receiverName", "Customer representative", "text", "", true)} /> : null}
+        {method === "CUSTOMER_PICKUP" ? <FormControl field={field("receiverPhone", "Contact number", "text", "", true)} /> : null}
+        {method === "CUSTOMER_PICKUP" ? <FormControl field={field("acknowledgementReference", "Pickup acknowledgement", "text", "", true)} /> : null}
+        {method === "COMPANY_VEHICLE" ? <FormControl field={field("vehicleNumber", "Vehicle number", "text", "", true)} /> : null}
+        {method === "COMPANY_VEHICLE" ? <FormControl field={field("driverName", "Driver name", "text", "", true)} /> : null}
+        {method === "COMPANY_VEHICLE" ? <FormControl field={field("driverPhone", "Driver phone")} /> : null}
+        {(isCourier || method === "COMPANY_VEHICLE") ? <FormControl field={field("destination", "Destination", "text", order?.customer.address ?? "", method === "COMPANY_VEHICLE")} /> : null}
+        <FormControl field={field("notes", "Notes")} />
+      </div>
+      <div className="flex justify-end gap-2 border-t border-neutral-200 pt-4"><SecondaryButton onClick={onCancel}>Cancel</SecondaryButton><PrimaryButton type="submit" disabled={!!busy}>{busy ? "Saving..." : "Confirm handover"}</PrimaryButton></div>
     </form>
   );
 }
